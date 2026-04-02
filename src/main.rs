@@ -10,7 +10,7 @@ use clap::Parser;
 
 use crate::runtime::WorkerTask;
 
-/// Serverless workers management system.
+/// Serverless workers management architecture.
 #[derive(clap::Parser)]
 #[command(name = "serverlessd", version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
