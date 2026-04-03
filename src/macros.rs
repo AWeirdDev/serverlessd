@@ -1,12 +1,20 @@
 /// Create a scope with context.
 #[macro_export]
 macro_rules! scope_with_context {
-    (isolate: $isolate:expr, let $scope:ident, let $context:ident) => {
+    (isolate: $isolate:expr, let &mut $scope:ident, let $context:ident) => {
         let $scope = std::pin::pin!(v8::HandleScope::new($isolate));
         let $scope = &mut $scope.init();
 
         let $context = v8::Context::new($scope, Default::default());
         let $scope = &mut v8::ContextScope::new($scope, $context);
+    };
+
+    (isolate: $isolate:expr, let $scope:ident, let $context:ident) => {
+        let $scope = std::pin::pin!(v8::HandleScope::new($isolate));
+        let $scope = &mut $scope.init();
+
+        let $context = v8::Context::new($scope, Default::default());
+        let $scope = v8::ContextScope::new($scope, $context);
     };
 }
 

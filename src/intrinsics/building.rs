@@ -1,6 +1,9 @@
-use std::mem;
+use std::{mem, sync::Arc};
 
-use v8::{GetPropertyNamesArgs, Global, Isolate, Local, PinScope, Platform, Promise, PromiseState};
+use v8::{
+    GetPropertyNamesArgs, Global, Isolate, Local, PinScope, Platform, Promise, PromiseState,
+    SharedRef,
+};
 
 use crate::{
     compile::compile_module,
@@ -66,11 +69,14 @@ fn resolve_module_callback_intrinsics<'a>(
 
 /// Build intrinsics and store them in a [`Global`]-sealed [`v8::Value`].
 #[must_use]
-pub fn build_intrinsics(state: &WorkerState, isolate: &mut Isolate) -> Global<v8::Value> {
+pub fn build_intrinsics(
+    platform: &SharedRef<Platform>,
+    isolate: &mut Isolate,
+) -> Global<v8::Value> {
     let (module, promised) = {
         scope_with_context!(
             isolate: isolate,
-            let scope,
+            let &mut scope,
             let context
         );
 
@@ -105,11 +111,11 @@ pub fn build_intrinsics(state: &WorkerState, isolate: &mut Isolate) -> Global<v8
     };
 
     // wait for the module to load
-    while Platform::pump_message_loop(&state.platform, isolate, false) {}
+    while Platform::pump_message_loop(&platform, isolate, false) {}
 
     scope_with_context!(
         isolate: isolate,
-        let scope,
+        let &mut scope,
         let context
     );
 

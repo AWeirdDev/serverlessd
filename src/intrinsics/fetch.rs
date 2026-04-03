@@ -1,7 +1,55 @@
+use std::str::FromStr;
+
+use reqwest::{
+    Method,
+    header::{HeaderMap, HeaderName, HeaderValue},
+};
+use v8::{Global, Local, Object, PromiseResolver};
+
 use crate::{
-    intrinsics::utils::{ThrowException, throw},
+    language::{ThrowException, throw},
     runtime::WorkerState,
 };
+
+macro_rules! some {
+    ($k:expr) => {{
+        let Some(m) = $k else {
+            return;
+        };
+        m
+    }};
+
+    ($k:expr, else ($scope:expr, $rv:expr) => $b:block) => {{
+        let Some(m) = $k else {
+            let rej = $b;
+            let resolver = v8::PromiseResolver::new($scope).unwrap();
+            resolver.reject($scope, rej.cast());
+            $rv.set(resolver.cast());
+            return;
+        };
+        m
+    }};
+}
+
+macro_rules! ok {
+    ($k:expr) => {{
+        let Ok(m) = $k else {
+            return;
+        };
+        m
+    }};
+
+    ($k:expr, else ($scope:expr, $rv:expr) => $b:block) => {{
+        let Ok(m) = $k else {
+            let rej = $b;
+            let resolver = v8::PromiseResolver::new($scope).unwrap();
+            resolver.reject($scope, rej.cast());
+            $rv.set(resolver.cast());
+            return;
+        };
+        m
+    }};
+}
 
 /// Fetch API for serverless.
 pub fn fetch(
@@ -32,5 +80,88 @@ pub fn fetch(
         .unwrap()
         .to_rust_string_lossy(scope);
 
-    println!("{url:?} {client:#?}");
+    let options = args.get(1);
+    let has_options = options.is_object() && !options.is_null_or_undefined();
+
+    let method = if has_options {
+        let options = options.cast::<Object>();
+
+        // method
+        let meth_name = options
+            .get(scope, some!(v8::String::new(scope, "method")).cast())
+            .map(|item| item.to_rust_string_lossy(scope))
+            .unwrap_or_else(|| "GET".to_string());
+
+        // NOTE: custom behavior
+        // this is to align with Rust reqwest's behaviors
+        // fuck it
+        ok!(Method::from_str(&meth_name), else (scope, rv) => {
+            throw(scope, ThrowException::TypeError("fetch: Invalid method"))
+        })
+    } else {
+        Method::GET
+    };
+
+    let mut rq = client.request(method, url);
+
+    // we gotta parse some fucking options now
+    if has_options {
+        let options = options.cast::<Object>();
+
+        // headers
+        {
+            let headers_k =
+                some!(options.get(scope, some!(v8::String::new(scope, "headers")).cast()));
+
+            if headers_k.is_object() && !headers_k.is_null_or_undefined() {
+                let headers_obj = headers_k.cast::<Object>();
+                let header_names =
+                    some!(headers_obj.get_own_property_names(scope, Default::default()));
+
+                let mut rq_headers = HeaderMap::new();
+
+                for idx in 0..header_names.length() {
+                    if let Some(key) = header_names.get_index(scope, idx) {
+                        let key_str = some!(key.to_string(scope)).to_rust_string_lossy(scope);
+                        let val = some!(headers_obj.get(scope, key));
+                        let val_str = some!(val.to_string(scope)).to_rust_string_lossy(scope);
+                        rq_headers.insert(
+                            ok!(HeaderName::from_str(&key_str)),
+                            ok!(HeaderValue::from_str(&val_str)),
+                        );
+                    }
+                }
+
+                rq = rq.headers(rq_headers);
+            }
+        }
+
+        // body
+        {}
+    }
+
+    let resolver = some!(PromiseResolver::new(scope));
+
+    let gresolver = Global::new(scope, resolver);
+    state.clone().tasks.spawn_local(async move {
+        let result = rq.send().await;
+        match result {
+            Ok(resp) => {
+                println!("success! {resp:#?}");
+                let ctx_scope = &*state.ctx_scope.get().await;
+                let resolver = Local::new(ctx_scope, gresolver);
+                resolver.resolve(ctx_scope, v8::null(ctx_scope).cast());
+            }
+
+            Err(err) => {
+                println!("failed :( {err:#?}");
+                let ctx_scope = &*state.ctx_scope.get().await;
+                let details = err.to_string();
+                let resolver = Local::new(ctx_scope, gresolver);
+                resolver.reject(ctx_scope, throw(ctx_scope, ThrowException::Error(details)));
+            }
+        }
+    });
+
+    rv.set(resolver.cast());
 }

@@ -4,5 +4,5 @@
 mod exception;
 mod promise;
 
-pub use exception::{ExceptionDetails, ExceptionDetailsExt};
+pub use exception::{ExceptionDetails, ExceptionDetailsExt, ThrowException, throw};
 pub use promise::Promised;

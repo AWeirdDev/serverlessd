@@ -8,11 +8,15 @@ use crate::{
     scope_with_context,
 };
 
-pub enum WorkerTrigger {}
+#[derive(Debug)]
+pub enum WorkerTrigger {
+    Halt,
+}
 
 pub type WorkerTx = mpsc::Sender<WorkerTrigger>;
 type WorkerRx = mpsc::Receiver<WorkerTrigger>;
 
+#[derive(Debug)]
 pub struct Worker {
     tx: WorkerTx,
     handle: JoinHandle<Option<()>>,
@@ -25,8 +29,35 @@ impl Worker {
         let handle = pod.tasks.spawn_local(create_task(task, rx));
         Self { tx, handle }
     }
+
+    /// Trigger.
+    ///
+    /// Returns `false` if the channel is closed.
+    #[inline(always)]
+    #[must_use]
+    pub async fn trigger(&self, trigger: WorkerTrigger) -> bool {
+        self.tx.send(trigger).await.is_ok()
+    }
 }
 
+/// The worker task.
+///
+/// Example:
+///
+/// ```rs
+/// let serverless = Serverless::start_one();
+/// let task = WorkerTask {
+///     // the code
+///     source: "export default {}".to_string(),
+///
+///     // name for exception display
+///     source_name: "worker.js",
+///
+///     // the platform
+///     platform: serverless.get_platform(),
+/// }
+/// ```
+#[derive(Debug)]
 pub struct WorkerTask {
     // TODO: use BTreeMap
     pub source: String,
@@ -34,26 +65,21 @@ pub struct WorkerTask {
     pub platform: SharedRef<Platform>,
 }
 
-async fn create_task(task: WorkerTask, _rx: WorkerRx) -> Option<()> {
+async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
     let WorkerTask {
         source,
         source_name,
         platform,
     } = task;
 
-    // create an isolate
     let isolate = &mut v8::Isolate::new(Default::default());
-    let state = {
-        let state = WorkerState::new(platform);
-        state.inject_to_isolate(isolate)
-    };
 
-    let intrinsics_obj = intrinsics::build_intrinsics(state, isolate);
-
+    // environment initialization
+    let intrinsics_obj = intrinsics::build_intrinsics(&platform, isolate);
     let (module, promise) = {
         scope_with_context!(
             isolate: isolate,
-            let scope,
+            let &mut scope,
             let context
         );
 
@@ -76,7 +102,7 @@ async fn create_task(task: WorkerTask, _rx: WorkerRx) -> Option<()> {
         (Global::new(scope, module), Global::new(scope, promise))
     };
 
-    while Platform::pump_message_loop(&state.platform, isolate, false) {}
+    while Platform::pump_message_loop(&platform, isolate, false) {}
 
     scope_with_context!(
         isolate: isolate,
@@ -84,31 +110,39 @@ async fn create_task(task: WorkerTask, _rx: WorkerRx) -> Option<()> {
         let context
     );
 
-    let module = Local::new(scope, module);
+    let state = WorkerState::new_injected(platform, Box::new(scope));
+
+    let ctx_scope = state.ctx_scope.get_static();
+    let module = Local::new(ctx_scope, module);
     {
-        let promise = Local::new(scope, promise);
-        let promised = Promised::new(scope, promise);
+        let promise = Local::new(ctx_scope, promise);
+        let promised = Promised::new(ctx_scope, promise);
 
         match promised {
             Promised::Rejected(value) => {
                 // usually we get an exception
-                let exception = ExceptionDetails::from_exception(scope, value)?;
+                let exception = ExceptionDetails::from_exception(ctx_scope, value)?;
                 println!("{:#?}", exception);
                 return None;
             }
             Promised::Resolved(value) => {
-                println!("{}", value.to_rust_string_lossy(scope));
+                println!("{}", value.to_rust_string_lossy(ctx_scope));
             }
         }
     }
 
     let namespace = module.get_module_namespace().cast::<v8::Object>();
-    let df = namespace.get(scope, v8::String::new(scope, "default")?.cast())?;
-    println!("{df:#?}");
+    let _entrypoint = namespace.get(ctx_scope, v8::String::new(ctx_scope, "default")?.cast())?;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            WorkerTrigger::Halt => break,
+        }
+    }
 
     // clean up
     {
-        let state = WorkerState::open_from_isolate(scope);
+        let state = WorkerState::open_from_isolate(ctx_scope);
         state.wait_close().await;
     }
 
