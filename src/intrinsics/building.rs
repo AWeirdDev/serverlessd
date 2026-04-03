@@ -1,4 +1,4 @@
-use std::{mem, sync::Arc};
+use std::mem;
 
 use v8::{
     GetPropertyNamesArgs, Global, Isolate, Local, PinScope, Platform, Promise, PromiseState,
@@ -8,7 +8,6 @@ use v8::{
 use crate::{
     compile::compile_module,
     intrinsics::{self, files::get_intrinsics_file},
-    runtime::WorkerState,
     scope_with_context,
 };
 

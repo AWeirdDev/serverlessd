@@ -76,13 +76,16 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
 
     // environment initialization
     let intrinsics_obj = intrinsics::build_intrinsics(&platform, isolate);
-    let (module, promise) = {
+    let (state, module, promise) = {
         scope_with_context!(
             isolate: isolate,
-            let &mut scope,
+            let scope,
             let context
         );
 
+        let state = WorkerState::new_injected(platform, Box::new(scope));
+
+        let scope = state.ctx_scope.get_static();
         // we're gonna put them in the global
         {
             let context_global = context.global(scope);
@@ -99,18 +102,20 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
             .expect("failed to evaluate")
             .cast::<Promise>();
 
-        (Global::new(scope, module), Global::new(scope, promise))
+        (
+            state,
+            Global::new(scope, module),
+            Global::new(scope, promise),
+        )
     };
 
-    while Platform::pump_message_loop(&platform, isolate, false) {}
+    while Platform::pump_message_loop(&state.platform, isolate, false) {}
 
     scope_with_context!(
         isolate: isolate,
-        let scope,
+        let _scope,
         let context
     );
-
-    let state = WorkerState::new_injected(platform, Box::new(scope));
 
     let ctx_scope = state.ctx_scope.get_static();
     let module = Local::new(ctx_scope, module);

@@ -126,7 +126,9 @@ impl ObscuredContextScope {
     /// Borrow checking would be disabled, and the
     /// lock is immediately freed after returning.
     #[inline(always)]
-    pub fn get_static(&self) -> &v8::ContextScope<'static, 'static, v8::HandleScope<'static>> {
+    pub fn get_static(
+        &self,
+    ) -> &'static v8::ContextScope<'static, 'static, v8::HandleScope<'static>> {
         unsafe { &*(self.ptr.as_ptr() as *mut v8::ContextScope<'_, '_, v8::HandleScope<'_>>) }
     }
 
@@ -137,7 +139,7 @@ impl ObscuredContextScope {
     #[inline(always)]
     pub fn get_mut_static(
         &self,
-    ) -> &mut v8::ContextScope<'static, 'static, v8::HandleScope<'static>> {
+    ) -> &'static mut v8::ContextScope<'static, 'static, v8::HandleScope<'static>> {
         unsafe { &mut *(self.ptr.as_ptr() as *mut v8::ContextScope<'_, '_, v8::HandleScope<'_>>) }
     }
 
