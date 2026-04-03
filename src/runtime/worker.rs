@@ -66,6 +66,7 @@ pub struct WorkerTask {
     pub platform: SharedRef<Platform>,
 }
 
+#[tracing::instrument(skip_all)]
 async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
     let WorkerTask {
         source,
@@ -76,6 +77,7 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
     let isolate = Box::new(v8::Isolate::new(Default::default()));
     let state = WorkerState::new_injected(platform, isolate);
 
+    tracing::info!("initializing environment for worker");
     // environment initialization
     let (module, promise) = {
         scope_with_context!(
@@ -105,8 +107,12 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
         (Global::new(scope, module), Global::new(scope, promise))
     };
 
+    tracing::info!("resolving promise for worker init");
+
     let isolate = unsafe { state.get_isolate() };
     while Platform::pump_message_loop(&state.platform, isolate, false) {}
+
+    tracing::info!("resolved promise for worker init");
 
     scope_with_context!(
         isolate: isolate,

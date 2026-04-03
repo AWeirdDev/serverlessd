@@ -44,12 +44,15 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
 
     match cli.command {
         Command::One(args) => {
+            tracing::info!("creating a runtime in this thread...");
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("failed to create runtime");
+
             let source = fs::read_to_string(&args.file)?;
             let source_name = args.file.to_string_lossy().into_owned();
+
             rt.block_on(start_one(source, source_name));
         }
     }
@@ -58,6 +61,8 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
 }
 
 async fn start_one(source: String, source_name: String) {
+    tracing::info!(target: "(one)", "creating runtime");
+
     let serverless = Serverless::new_one();
     let platform = serverless.get_platform();
 
@@ -72,7 +77,7 @@ async fn start_one(source: String, source_name: String) {
         .await
         .expect("failed to create worker");
 
-    tracing::info!("created worker at {}:{}", pod_id, pod_worker_id);
+    tracing::info!("created one worker at {}:{}", pod_id, pod_worker_id);
 
     if let Err(e) = handle.await {
         tracing::error!(?e, "error while returning handle");
