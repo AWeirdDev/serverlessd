@@ -1,4 +1,21 @@
 /// Create a scope with context.
+///
+/// Example:
+/// ```no_run
+/// // get a &mut scope
+/// scope_with_context!(
+///     isolate: isolate,
+///     let &mut scope,
+///     let context
+/// );
+///
+/// // get an owned scope
+/// scope_with_context!(
+///     isolate: isolate,
+///     let scope,
+///     let context
+/// );
+/// ```
 #[macro_export]
 macro_rules! scope_with_context {
     (isolate: $isolate:expr, let &mut $scope:ident, let $context:ident) => {

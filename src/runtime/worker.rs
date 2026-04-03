@@ -72,20 +72,19 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
         platform,
     } = task;
 
-    let isolate = &mut v8::Isolate::new(Default::default());
+    let isolate = Box::new(v8::Isolate::new(Default::default()));
+    let state = WorkerState::new_injected(platform, isolate);
 
     // environment initialization
-    let intrinsics_obj = intrinsics::build_intrinsics(&platform, isolate);
-    let (state, module, promise) = {
+    let (module, promise) = {
         scope_with_context!(
-            isolate: isolate,
-            let scope,
+            isolate: unsafe { state.get_isolate() },
+            let &mut scope,
             let context
         );
 
-        let state = WorkerState::new_injected(platform, Box::new(scope));
+        let intrinsics_obj = intrinsics::build_intrinsics(&state.platform, scope);
 
-        let scope = state.ctx_scope.get_static();
         // we're gonna put them in the global
         {
             let context_global = context.global(scope);
@@ -102,42 +101,38 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
             .expect("failed to evaluate")
             .cast::<Promise>();
 
-        (
-            state,
-            Global::new(scope, module),
-            Global::new(scope, promise),
-        )
+        (Global::new(scope, module), Global::new(scope, promise))
     };
 
+    let isolate = unsafe { state.get_isolate() };
     while Platform::pump_message_loop(&state.platform, isolate, false) {}
 
     scope_with_context!(
         isolate: isolate,
-        let _scope,
+        let &mut scope,
         let context
     );
 
-    let ctx_scope = state.ctx_scope.get_static();
-    let module = Local::new(ctx_scope, module);
+    let module = Local::new(scope, module);
     {
-        let promise = Local::new(ctx_scope, promise);
-        let promised = Promised::new(ctx_scope, promise);
+        let promise = Local::new(scope, promise);
+        let promised = Promised::new(scope, promise);
 
         match promised {
             Promised::Rejected(value) => {
                 // usually we get an exception
-                let exception = ExceptionDetails::from_exception(ctx_scope, value)?;
+                let exception = ExceptionDetails::from_exception(scope, value)?;
                 println!("{:#?}", exception);
                 return None;
             }
             Promised::Resolved(value) => {
-                println!("{}", value.to_rust_string_lossy(ctx_scope));
+                println!("{}", value.to_rust_string_lossy(scope));
             }
         }
     }
 
     let namespace = module.get_module_namespace().cast::<v8::Object>();
-    let _entrypoint = namespace.get(ctx_scope, v8::String::new(ctx_scope, "default")?.cast())?;
+    let _entrypoint = namespace.get(scope, v8::String::new(scope, "default")?.cast())?;
 
     while let Some(event) = rx.recv().await {
         match event {
@@ -147,7 +142,7 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx) -> Option<()> {
 
     // clean up
     {
-        let state = WorkerState::open_from_isolate(ctx_scope);
+        let state = WorkerState::open_from_isolate(scope);
         state.wait_close().await;
     }
 

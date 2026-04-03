@@ -9,6 +9,7 @@ use v8::{Global, Local, Object, PromiseResolver};
 use crate::{
     language::{ThrowException, throw},
     runtime::WorkerState,
+    scope_with_context,
 };
 
 macro_rules! some {
@@ -148,17 +149,31 @@ pub fn fetch(
         match result {
             Ok(resp) => {
                 println!("success! {resp:#?}");
-                let ctx_scope = &*state.ctx_scope.get().await;
-                let resolver = Local::new(ctx_scope, gresolver);
-                resolver.resolve(ctx_scope, v8::null(ctx_scope).cast());
+
+                let isolate = unsafe { state.get_isolate() };
+                scope_with_context!(
+                    isolate: isolate,
+                    let &mut scope,
+                    let context
+                );
+
+                let resolver = Local::new(scope, gresolver);
+                resolver.resolve(scope, v8::null(scope).cast());
             }
 
             Err(err) => {
                 println!("failed :( {err:#?}");
-                let ctx_scope = &*state.ctx_scope.get().await;
                 let details = err.to_string();
-                let resolver = Local::new(ctx_scope, gresolver);
-                resolver.reject(ctx_scope, throw(ctx_scope, ThrowException::Error(details)));
+
+                let isolate = unsafe { state.get_isolate() };
+                scope_with_context!(
+                    isolate: isolate,
+                    let &mut scope,
+                    let context
+                );
+
+                let resolver = Local::new(scope, gresolver);
+                resolver.reject(scope, throw(scope, ThrowException::Error(details)));
             }
         }
     });
