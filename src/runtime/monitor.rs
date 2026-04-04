@@ -3,6 +3,7 @@ use std::{thread, time::Duration};
 use tokio::{
     sync::{mpsc, oneshot},
     task::LocalSet,
+    time::Instant,
 };
 use tokio_util::task::TaskTracker;
 
@@ -123,6 +124,29 @@ async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
     }
 }
 
+struct MonitoredFuture<F> {
+    inner: F,
+    tx: mpsc::Sender<()>,
+}
+
+impl<F: Future> Future for MonitoredFuture<F> {
+    type Output = F::Output;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+        let inner = unsafe { std::pin::Pin::new_unchecked(&mut this.inner) };
+
+        this.tx.try_send(()).ok();
+        let result = inner.poll(cx);
+        this.tx.try_send(()).ok();
+
+        result
+    }
+}
+
 #[repr(transparent)]
 pub struct Monitoring {
     tx: mpsc::Sender<()>,
@@ -142,22 +166,31 @@ impl Monitoring {
 }
 
 async fn monitor_worker_task(mut mw: MonitoredWorker) {
+    let mut elapsed = Duration::default();
+
     while let Some(()) = mw.rx.recv().await {
-        tracing::info!("i got you");
+        if elapsed.as_secs() > 10 {
+            tracing::error!("(per worker, 10s) time's up");
+            break;
+        }
+
+        let start = Instant::now();
+
         tokio::select! {
             // we still like the user at some point
             biased;
 
             _ = mw.rx.recv() => {
-                tracing::info!("you're good this time...");
+                elapsed += start.elapsed();
             }
-            _ = tokio::time::sleep(Duration::from_millis(10)) => {
-                tracing::error!("time's up bitch");
-                if !mw.isolate.terminate_execution() {
-                    tracing::error!("failed to terminate isolate when 10ms time's up");
-                }
+            _ = tokio::time::sleep(Duration::from_millis(30)) => {
+                tracing::error!("(per task, 30ms) time's up");
                 break;
             }
         };
+    }
+
+    if !mw.isolate.terminate_execution() {
+        tracing::error!("failed to terminate isolate when time's up");
     }
 }
