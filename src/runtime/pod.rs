@@ -5,9 +5,11 @@ use tokio::{
     task,
 };
 use tokio_util::task::TaskTracker;
-use v8::IsolateHandle;
 
-use crate::runtime::{Worker, WorkerTask, WorkerTrigger, monitor::Monitor};
+use crate::runtime::{
+    Worker, WorkerTask, WorkerTrigger,
+    monitor::{Monitor, MonitorHandle},
+};
 
 #[derive(Debug)]
 pub enum PodTrigger {
@@ -40,7 +42,7 @@ type PodRx = mpsc::Receiver<PodTrigger>;
 pub struct Pod {
     workers: Vec<Option<Worker>>,
     vacancies: Vec<usize>,
-    pub(super) monitor: Cell<Monitor>,
+    pub(super) monitor: MonitorHandle,
     pub(super) tasks: TaskTracker,
 }
 
@@ -53,7 +55,10 @@ impl Pod {
             workers: Vec::with_capacity(n_workers),
             vacancies: Vec::with_capacity(n_workers),
             tasks: TaskTracker::new(),
-            monitor: Cell::new(Monitor::new(n_workers)),
+            monitor: {
+                let m = Monitor::new();
+                m.start()
+            },
         };
 
         let pod_handle = PodHandle::new(tx);
@@ -115,8 +120,9 @@ impl Pod {
     #[inline]
     #[must_use]
     fn create_worker(&mut self, task: WorkerTask) -> usize {
+        let worker = Worker::start(self, task);
+
         let id = self.get_next_worker_id();
-        let worker = Worker::start(self, task, id);
         self.put_worker(id, worker);
 
         id

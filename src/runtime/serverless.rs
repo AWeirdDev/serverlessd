@@ -103,6 +103,11 @@ impl Serverless {
         None
     }
 
+    #[inline(always)]
+    fn get_pod(&self, id: usize) -> Option<&PodHandle> {
+        self.pods.get(id)
+    }
+
     /// Stop all pods.
     async fn halt(&mut self) {
         for pod in self.pods.drain(..) {
@@ -168,7 +173,12 @@ impl ServerlessHandle {
     }
 
     /// Helper for triggering worker.
-    pub async fn trigger_worker(&self, pod_id: usize, worker_id: usize, trigger: WorkerTrigger) {
+    pub async fn trigger_worker(
+        &self,
+        pod_id: usize,
+        worker_id: usize,
+        trigger: WorkerTrigger,
+    ) -> Option<()> {
         self.tx
             .send(ServerlessTrigger::ToPod {
                 id: pod_id,
@@ -177,7 +187,8 @@ impl ServerlessHandle {
                     trigger,
                 },
             })
-            .await;
+            .await
+            .ok()
     }
 }
 
@@ -228,6 +239,9 @@ async fn serverless_task(mut serverless: Serverless, mut rx: ServerlessRx, addr:
 
             Ok((stream, _)) = listener.accept() => {
                 let _io = TokioIo::new(stream);
+                let pod = serverless.get_pod(0).unwrap();
+                let _ = pod.trigger(PodTrigger::ToWorker { id: 0, trigger: WorkerTrigger::Http {  } }).await;
+
                 tracing::info!("got http connection!");
             }
         }

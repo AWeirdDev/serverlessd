@@ -5,9 +5,9 @@ use v8::{Global, Isolate, Local, Platform, Promise, SharedRef};
 
 use crate::{
     compile, intrinsics,
-    language::{ExceptionDetails, Promised},
-    runtime::{Pod, monitor::Monitor, state::WorkerState},
-    scope_with_context,
+    language::{ExceptionDetails, ExceptionDetailsExt, Promised},
+    runtime::{Pod, monitor::MonitorHandle, state::WorkerState},
+    scope_with_context, try_catch,
 };
 
 #[derive(Debug)]
@@ -29,14 +29,12 @@ pub struct Worker {
 
 impl Worker {
     #[inline]
-    pub fn start(pod: &Pod, task: WorkerTask, worker_id: usize) -> Self {
+    pub fn start(pod: &Pod, task: WorkerTask) -> Self {
         let (tx, rx) = mpsc::channel::<WorkerTrigger>(64);
 
-        // safety: we're in a single-threaded environment
-        let monitor_ptr = pod.monitor.as_ptr();
+        let monitor = pod.monitor.clone();
 
-        pod.tasks
-            .spawn_local(create_task(task, rx, worker_id, monitor_ptr));
+        pod.tasks.spawn_local(create_task(task, rx, monitor));
         Self { tx }
     }
 
@@ -76,7 +74,7 @@ pub struct WorkerTask {
 }
 
 #[tracing::instrument(skip_all)]
-async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monitor: *mut Monitor) {
+async fn create_task(task: WorkerTask, mut rx: WorkerRx, monitor: MonitorHandle) {
     let WorkerTask {
         source,
         source_name,
@@ -84,9 +82,9 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monit
     } = task;
 
     let isolate = Box::new(v8::Isolate::new(Default::default()));
-    let monitoring = {
-        let mn = unsafe { &mut *monitor };
-        mn.put(isolate.thread_safe_handle(), worker_id)
+    let Some(monitoring) = monitor.start_monitoring(isolate.thread_safe_handle()).await else {
+        tracing::error!("failed to start monitoring");
+        return;
     };
 
     let state = WorkerState::new_injected(platform, isolate);
@@ -94,6 +92,7 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monit
     macro_rules! some {
         ($scope:expr, $k:expr) => {{
             let Some(m) = $k else {
+                tracing::error!("errored on worker, force quit");
                 close_state($scope).await;
                 return;
             };
@@ -112,27 +111,54 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monit
         );
 
         let intrinsics_obj = intrinsics::build_intrinsics(&state.platform, scope);
+        tracing::info!("built intrinsics");
 
         // we're gonna put them in the global
         {
             let context_global = context.global(scope);
             intrinsics::extract_intrinsics(scope, context_global, intrinsics_obj);
         }
+        tracing::info!("extracted intrinsics");
 
         let module = compile::compile_module(scope, source, source_name);
+        tracing::info!("compiled module");
 
+        monitoring.tick();
+
+        try_catch!(scope: scope, let try_catch);
+
+        tracing::info!("instantiating module");
         // instantiate imports, etc.
-        module
-            .instantiate_module(scope, compile::resolve_module_callback)
-            .expect("instantiation failed");
+        {
+            let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
+            if res.is_none() {
+                tracing::info!(
+                    "error while instantiating module, reason: {:#?}",
+                    try_catch.exception_details()
+                );
+                return;
+            }
+        }
+        tracing::info!("instantiating module");
 
         // instantiate evaluations
-        let promise = module
-            .evaluate(scope)
-            .expect("failed to evaluate")
-            .cast::<Promise>();
+        let Some(promise) = module.evaluate(try_catch) else {
+            tracing::info!(
+                "error while evaluating module, reason: {:#?}",
+                try_catch.exception_details()
+            );
+            close_state(try_catch).await;
+            return;
+        };
 
-        (Global::new(scope, module), Global::new(scope, promise))
+        let promise = promise.cast::<Promise>();
+
+        monitoring.tick();
+
+        (
+            Global::new(try_catch, module),
+            Global::new(try_catch, promise),
+        )
     };
 
     tracing::info!("resolving promise for worker env init");
@@ -181,6 +207,20 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monit
         return;
     }
 
+    let entrypoint = entrypoint.cast::<v8::Object>();
+    let entrypoint_fetch = {
+        let item = some!(
+            scope,
+            entrypoint.get(scope, some!(scope, v8::String::new(scope, "fetch")).cast())
+        );
+
+        if item.is_function() {
+            Some(item.cast::<v8::Function>())
+        } else {
+            None
+        }
+    };
+
     while let Some(event) = rx.recv().await {
         scope.perform_microtask_checkpoint();
 
@@ -188,7 +228,6 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monit
             WorkerTrigger::Halt { token } => {
                 // clean up
                 tracing::info!("worker clean up");
-
                 close_state(scope).await;
 
                 token.send(()).ok();
@@ -196,7 +235,23 @@ async fn create_task(task: WorkerTask, mut rx: WorkerRx, worker_id: usize, monit
                 break;
             }
 
-            WorkerTrigger::Http {} => {}
+            WorkerTrigger::Http {} => {
+                if let Some(fetch) = entrypoint_fetch {
+                    monitoring.tick();
+
+                    try_catch!(scope: scope, let try_catch);
+
+                    let result = some!(
+                        try_catch,
+                        fetch.call(try_catch, v8::undefined(try_catch).cast(), &[])
+                    );
+                    // if result.is_promise() {
+                    //     result.cast::<v8::Promise>();
+                    // }
+
+                    monitoring.tick();
+                }
+            }
         }
     }
 }

@@ -1,7 +1,8 @@
 export default {
-  async fetch() {
-    fetch("https://example.com", {
-      method: "GET",
-    });
+  fetch() {
+    let a = true;
+    for (;;) {
+      a = !a;
+    }
   },
 };
