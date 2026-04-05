@@ -2,6 +2,6 @@ mod pod;
 mod serverless;
 mod worker;
 
-pub use pod::Pod;
-pub use serverless::Serverless;
+pub use pod::*;
+pub use serverless::*;
 pub use worker::*;
