@@ -82,6 +82,7 @@ struct RunArgs {
 
 #[derive(clap::Args)]
 struct CleanArgs {
+    /// Whether to forcefully clean them up.
     #[arg(short, required = false, default_value = "false")]
     y: bool,
 }
