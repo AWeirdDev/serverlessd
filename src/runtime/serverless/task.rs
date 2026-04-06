@@ -22,6 +22,8 @@ pub(super) async fn serverless_task(
     app_state: Arc<AppState>,
     addr: SocketAddr,
 ) {
+    serverless.code_store.check_fs().await;
+
     // now, we gotta start those threads
     // i know, this might be a bit not so memory efficient
     let mut handles = Vec::with_capacity(serverless.n_threads);
@@ -36,7 +38,7 @@ pub(super) async fn serverless_task(
     tokio::pin!(ctrl_c);
 
     let Ok(listener) = TcpListener::bind(addr).await else {
-        tracing::info!("failed to create tcp listener, exiting");
+        tracing::error!("failed to create tcp listener, exiting");
         close_serverless(serverless, handles).await;
         return;
     };
@@ -69,12 +71,13 @@ pub(super) async fn serverless_task(
                                 serverless.remove_universal_worker_name(&name);
                             }
 
-                            ServerlessTrigger::UploadWorkerCode { name, code } => {
-                                serverless.upload_worker_code(name, code);
+                            ServerlessTrigger::UploadWorkerCode { name, code, reply } => {
+                                let err = serverless.upload_worker_code(name, code).await.err();
+                                reply.send(err).ok();
                             }
 
                             ServerlessTrigger::RemoveWorkerCode { name } => {
-                                serverless.remove_worker_code(&name);
+                                serverless.remove_worker_code(&name).await;
                             }
                         }
                     },

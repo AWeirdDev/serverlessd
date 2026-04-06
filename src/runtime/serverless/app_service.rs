@@ -6,7 +6,9 @@ use hyper::body::Bytes;
 use hyper::{Method, Request, Response, StatusCode, header};
 use matchit::Router;
 use serde_json::json;
+use tokio::sync::oneshot;
 
+use crate::runtime::serverless::code_store::CodeStoreError;
 use crate::runtime::serverless::{handle::ServerlessHandle, trigger::ServerlessTrigger};
 
 pub(super) struct AppState {
@@ -79,12 +81,40 @@ pub(super) async fn service_handler_inner(
                 let code_bytes = req.into_body().collect().await.unwrap().to_bytes();
                 let code = String::from_utf8(code_bytes.to_vec()).unwrap();
 
+                let (reply, recv) = oneshot::channel();
                 state
                     .serverless
-                    .trigger(ServerlessTrigger::UploadWorkerCode { name, code })
+                    .trigger(ServerlessTrigger::UploadWorkerCode { name, code, reply })
                     .await;
 
-                let data = serde_json::to_vec(&json!({"ok": 1})).unwrap();
+                if let Some(err) = recv.await.unwrap() {
+                    return match &err {
+                        CodeStoreError::InvalidName(_) => {
+                            let data =
+                                serde_json::to_vec(&json!({ "error": err.to_string() })).unwrap();
+                            Ok(Response::builder()
+                                .header(header::CONTENT_TYPE, "application/json")
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Full::new(Bytes::from(data)))
+                                .unwrap())
+                        }
+                        CodeStoreError::IoError(_) => {
+                            tracing::error!("failed to upload worker (io), reason: {:?}", err);
+
+                            let data = serde_json::to_vec(
+                                &json!({ "error": "failed to upload worker, try again later" }),
+                            )
+                            .unwrap();
+                            Ok(Response::builder()
+                                .header(header::CONTENT_TYPE, "application/json")
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(Full::new(Bytes::from(data)))
+                                .unwrap())
+                        }
+                    };
+                }
+
+                let data = serde_json::to_vec(&json!({})).unwrap();
                 return Ok(Response::builder()
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Full::new(Bytes::from(data)))

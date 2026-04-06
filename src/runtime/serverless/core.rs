@@ -8,7 +8,12 @@ use v8::{Platform, SharedRef};
 
 use crate::runtime::{
     PodHandle, WorkerTask,
-    serverless::{app_service::AppState, handle::ServerlessHandle, task::serverless_task},
+    serverless::{
+        app_service::AppState,
+        code_store::{CodeStore, CodeStoreError},
+        handle::ServerlessHandle,
+        task::serverless_task,
+    },
 };
 
 /// The serverless runtime.
@@ -25,7 +30,7 @@ pub struct Serverless {
     pub(super) n_workers: usize,
 
     pub(super) mapping: HashMap<String, (usize, usize)>,
-    pub(super) uploads: HashMap<String, String>,
+    pub(super) code_store: CodeStore,
 
     // why the fuck is this super fucking big???
     // like, fucking 16 bytes
@@ -47,12 +52,13 @@ impl Serverless {
         };
 
         let pods = Vec::with_capacity(n_threads);
+        let code_store = CodeStore::new();
 
         Self {
             n_threads,
             n_workers,
             mapping: HashMap::with_capacity(n_threads * n_workers),
-            uploads: HashMap::with_capacity(n_threads * n_workers), // minimum capacity
+            code_store,
             platform,
             pods,
         }
@@ -143,13 +149,17 @@ impl Serverless {
         self.mapping.remove(name)
     }
 
-    #[inline(always)]
-    pub(super) fn upload_worker_code(&mut self, name: String, code: String) {
-        self.uploads.insert(name, code);
+    #[inline]
+    pub(super) async fn upload_worker_code(
+        &mut self,
+        name: String,
+        code: String,
+    ) -> Result<(), CodeStoreError> {
+        self.code_store.upload_worker_code(name, code).await
     }
 
-    #[inline(always)]
-    pub(super) fn remove_worker_code(&mut self, name: &str) {
-        self.uploads.remove(name);
+    #[inline]
+    pub(super) async fn remove_worker_code(&mut self, name: &str) {
+        self.code_store.remove_worker_code(name).await;
     }
 }
