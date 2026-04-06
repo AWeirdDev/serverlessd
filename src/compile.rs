@@ -27,10 +27,10 @@ pub fn resolve_module_callback<'a>(
     None
 }
 
-pub fn compile_module<'s, K: AsRef<str>>(
+pub fn compile_module<'s, K0: AsRef<str>, K1: AsRef<str>>(
     scope: &PinScope<'s, '_>,
-    source: K,
-    name: K,
+    source: K0,
+    name: K1,
 ) -> Option<v8::Local<'s, v8::Module>> {
     let source_str = v8::String::new(scope, source.as_ref()).unwrap();
     let name_str = v8::String::new(scope, name.as_ref()).unwrap();

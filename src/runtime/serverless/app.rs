@@ -48,8 +48,20 @@ async fn wildcard() -> &'static str {
 }
 
 #[handler]
-async fn worker(req: &mut Request, _depot: &Depot) -> String {
-    format!("{}, to: {:?}", req.method(), req.param::<&str>("rest"))
+async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
+    let name = req.param::<String>("name").unwrap();
+    let state = depot.obtain::<Arc<AppState>>().unwrap();
+
+    let Some((pod, wrk)) = state.serverless.create_worker(name).await else {
+        res.render(errored("failed to create worker"));
+        return;
+    };
+
+    let Some(result) = state.serverless.send_http_to_worker(pod, wrk).await else {
+        res.render(errored("failed to execute worker"));
+        return;
+    };
+    res.render(result);
 }
 
 #[handler]

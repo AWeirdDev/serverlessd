@@ -60,9 +60,6 @@ macro_rules! unwrap {
 ///     // the code
 ///     source: "export default {}".to_string(),
 ///
-///     // name for exception display
-///     source_name: "worker.js",
-///
 ///     // the platform
 ///     platform: serverless.get_platform(),
 /// }
@@ -71,7 +68,6 @@ macro_rules! unwrap {
 pub struct WorkerTask {
     // TODO: use BTreeMap
     pub source: String,
-    pub source_name: String,
     pub platform: SharedRef<Platform>,
 }
 
@@ -100,11 +96,7 @@ async fn create_task(
     monitor_handle: MonitorHandle,
     state_handle: &mut Option<Arc<WorkerState>>,
 ) -> Result<(), WorkerError> {
-    let WorkerTask {
-        source,
-        source_name,
-        platform,
-    } = task;
+    let WorkerTask { source, platform } = task;
 
     let mut isolate = Box::new(v8::Isolate::new(Default::default()));
     isolate.set_microtasks_policy(v8::MicrotasksPolicy::Auto);
@@ -139,7 +131,7 @@ async fn create_task(
             );
         }
 
-        let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, source_name));
+        let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
 
         state.tick_monitoring();
 

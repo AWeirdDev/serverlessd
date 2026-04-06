@@ -6,7 +6,7 @@ use crate::runtime::{PodTrigger, WorkerTask, serverless::code_store::CodeStoreEr
 #[derive(Debug)]
 pub enum ServerlessTrigger {
     CreateWorker {
-        task: WorkerTask,
+        name: String,
         reply: oneshot::Sender<Option<(usize, usize)>>,
     },
 

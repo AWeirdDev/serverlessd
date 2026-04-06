@@ -6,14 +6,16 @@ mod runtime;
 
 use std::{
     fs,
+    io::{self, Write},
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     str::FromStr,
 };
 
+use bytes::Bytes;
 use clap::Parser;
 
-use crate::runtime::{Serverless, WorkerTask};
+use crate::runtime::Serverless;
 
 /// Serverless workers management architecture.
 #[derive(clap::Parser)]
@@ -37,6 +39,9 @@ enum Command {
     /// The amount of memory needed is determined by the
     /// `n-pods` and `n-pods-per-worker` options.
     Run(RunArgs),
+
+    /// Cleans all stored workers.
+    Clean(CleanArgs),
 }
 
 #[derive(clap::Args)]
@@ -73,6 +78,12 @@ struct RunArgs {
     /// can be reduced.
     #[arg(long, required = true)]
     n_workers_per_pod: usize,
+}
+
+#[derive(clap::Args)]
+struct CleanArgs {
+    #[arg(short, required = false, default_value = "false")]
+    y: bool,
 }
 
 fn main() {
@@ -143,6 +154,23 @@ fn main() {
                 secret,
             ));
         }
+
+        Command::Clean(args) => {
+            if !args.y {
+                let mut buf = String::with_capacity(1);
+                print!("this will remove all workers in (.serverlessd/workers/) [y/N] ");
+                io::stdout().flush().ok();
+                io::stdin().read_line(&mut buf).ok();
+
+                if !buf.to_lowercase().starts_with("y") {
+                    eprintln!("=====> canceled.");
+                    return;
+                }
+            }
+
+            fs::remove_dir_all(".serverlessd/").ok();
+            println!("=====> cleaned all workers.");
+        }
     }
 }
 
@@ -152,15 +180,18 @@ async fn start_one(source: String, source_name: String, addr: SocketAddr, secret
 
     let (svl, handle) = serverless.start(addr, secret);
 
-    let Some((pod_id, pod_worker_id)) = svl
-        .create_worker(WorkerTask {
-            source,
-            source_name,
-            platform,
-        })
-        .await
-    else {
-        tracing::error!("failed to create worker");
+    let res = svl
+        .upload_worker("index".to_string(), Bytes::from_owner(source))
+        .await;
+    if res.is_none() {
+        tracing::error!("failed to upload one worker");
+        eprintln!("======x error: failed to upload one worker");
+        eprintln!("               this is usually due to a closed serverless runtime");
+        return;
+    }
+
+    let Some((pod_id, pod_worker_id)) = svl.create_worker("index".to_string()).await else {
+        tracing::error!("failed to create one worker");
         eprintln!("======x error: failed to create one worker");
         eprintln!("               this is usually due to a closed serverless runtime");
         return;

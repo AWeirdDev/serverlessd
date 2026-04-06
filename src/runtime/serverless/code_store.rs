@@ -78,4 +78,10 @@ impl CodeStore {
         let path = self.check_fs().await.join(format!("{}.js", &name));
         fs::remove_file(path).ok();
     }
+
+    #[inline(always)]
+    pub(super) async fn get_worker_code(&self, name: &str) -> Option<String> {
+        let path = self.check_fs().await.join(format!("{}.js", &name));
+        tokio::fs::read_to_string(path).await.ok()
+    }
 }

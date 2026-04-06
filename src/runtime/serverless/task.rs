@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use tokio::task::JoinHandle;
 
 use crate::runtime::{
-    Pod,
+    Pod, WorkerTask,
     serverless::{
         app::start_server,
         core::Serverless,
@@ -58,8 +58,15 @@ pub(super) async fn serverless_task(
                 match trigger_result {
                     Some(trigger) => {
                         match trigger {
-                            ServerlessTrigger::CreateWorker { task, reply } => {
-                                reply.send(serverless.create_worker(task).await).ok();
+                            ServerlessTrigger::CreateWorker { name, reply } => {
+                                let source = match serverless.code_store.get_worker_code(&name).await {
+                                    Some(t) => t,
+                                    None => {
+                                        reply.send(None).ok();
+                                        continue;
+                                        }
+                                };
+                                reply.send(serverless.create_worker(WorkerTask { source, platform: serverless.get_platform() }).await).ok();
                             }
                             ServerlessTrigger::ToPod { id: _, trigger: _ } => {
                                 unimplemented!()

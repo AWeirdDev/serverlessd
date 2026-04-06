@@ -2645,6 +2645,7 @@ dependencies = [
  "jsonwebtoken",
  "once_cell",
  "pnet",
+ "rand 0.10.0",
  "regex",
  "reqwest",
  "salvo",
