@@ -1,7 +1,7 @@
-use std::{ffi::c_void, sync::Arc};
+use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 
 use tokio::sync::oneshot;
-use v8::{External, Function, Global, Local, Platform, Promise, SharedRef};
+use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
 
 use crate::{
     compile, intrinsics,
@@ -72,93 +72,101 @@ pub struct WorkerTask {
 }
 
 pub(super) async fn create_cancel_safe_task(
-    task: WorkerTask,
-    tx: WorkerTx,
-    rx: WorkerRx,
-    monitor_handle: MonitorHandle,
-) {
-    let mut state_handle = None;
-    let result = create_task(task, tx, rx, monitor_handle, &mut state_handle).await;
-    if let Some(state) = state_handle {
-        close_state(state).await;
-    }
-
-    if let Err(err) = result {
-        tracing::error!("got error on closed handler, {:?}", err);
-    }
-}
-
-#[tracing::instrument(skip_all)]
-async fn create_task(
-    task: WorkerTask,
     tx: WorkerTx,
     mut rx: WorkerRx,
     monitor_handle: MonitorHandle,
-    state_handle: &mut Option<Arc<WorkerState>>,
-) -> Result<(), WorkerError> {
-    let WorkerTask { source, platform } = task;
-
+) {
     let mut isolate = Box::new(v8::Isolate::new(Default::default()));
     isolate.set_microtasks_policy(v8::MicrotasksPolicy::Auto);
 
-    let Some(state) = WorkerState::create_injected(platform, isolate, tx, monitor_handle).await
-    else {
-        return Ok(());
-    };
+    let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
 
-    state_handle.replace(state.clone());
+    while let Some(msg) = rx.recv().await {
+        match msg {
+            WorkerTrigger::StartTask { id, task } => {
+                let mut state_handle = None;
 
-    tracing::info!("initializing environment for worker");
+                let result = create_task(
+                    id,
+                    isolate_ptr,
+                    task,
+                    tx.clone(),
+                    &mut rx,
+                    monitor_handle.clone(),
+                    &mut state_handle,
+                )
+                .await;
 
-    // environment initialization
-    let (module, promise) = {
-        scope_with_context!(
-            isolate: unsafe { state.get_isolate() },
-            let &mut scope,
-            let context
-        );
-        try_catch!(scope: scope, let try_catch);
+                match result {
+                    Ok(should_restart) => {
+                        if !should_restart {
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::error!("got error on closed handler, {:?}", err);
+                    }
+                }
 
-        let intrinsics_obj =
-            unwrap!(try_catch, some init intrinsics::build_intrinsics(&state.platform, try_catch));
+                if let Some(state) = state_handle {
+                    close_state(state).await;
+                }
+            }
 
-        // we're gonna put them in the global
-        {
-            let context_global = context.global(try_catch);
-            unwrap!(
-                try_catch,
-                some init intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj)
-            );
-        }
+            WorkerTrigger::Kill { token } => {
+                // drop the isolate, JUST IN CASE I FORGET
+                let _ = unsafe { Box::from_raw(isolate_ptr.as_ptr()) };
+                tracing::info!("isolate is shut down.");
+                token.send(()).ok();
+                break;
+            }
 
-        let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
-
-        state.tick_monitoring();
-
-        // instantiate imports, etc.
-        {
-            let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
-            if res.is_none() {
-                return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
+            _ => {
+                tracing::warn!(
+                    "unknown worker trigger event {:?} while in sleeping loop, skipping",
+                    msg
+                );
             }
         }
+    }
+}
 
-        // instantiate evaluations
-        let Some(promise) = module.evaluate(try_catch) else {
-            return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
-        };
-        let promise = promise.cast::<Promise>();
-
-        state.tick_monitoring();
-
-        (
-            Global::new(try_catch, module),
-            Global::new(try_catch, promise),
+/// Create a task for running this worker.
+///
+/// # Returns
+/// A `bool`, indicating whether to reuse this warmed worker.
+#[tracing::instrument(skip_all)]
+async fn create_task(
+    worker_id: usize,
+    isolate_ptr: NonNull<OwnedIsolate>,
+    task: WorkerTask,
+    tx: WorkerTx,
+    rx: &mut WorkerRx,
+    monitor_handle: MonitorHandle,
+    state_handle: &mut Option<Arc<WorkerState>>,
+) -> Result<bool, WorkerError> {
+    let InitResult {
+        state,
+        module,
+        promise,
+    } = {
+        match init_worker_for_task(
+            worker_id,
+            isolate_ptr,
+            task,
+            tx,
+            monitor_handle,
+            state_handle,
         )
+        .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(e);
+            }
+        }
     };
-
     let isolate = unsafe { state.get_isolate() };
-    while Platform::pump_message_loop(&state.platform, isolate, false) {}
 
     scope_with_context!(
         isolate: isolate,
@@ -212,17 +220,28 @@ async fn create_task(
         }
     };
 
-    tracing::info!("worker now waiting for events");
+    tracing::info!("worker now started, waiting for events");
     while let Some(event) = rx.recv().await {
-        tracing::info!("microtask");
         try_catch.perform_microtask_checkpoint();
         state.cleanup_dead_repliers();
 
         match event {
-            WorkerTrigger::Halt { token } => {
+            // ===== bad events =====
+            WorkerTrigger::StartTask { .. } => {
+                tracing::error!("unwanted 'start task' event while in worker loop");
+                break;
+            }
+            WorkerTrigger::Kill { .. } => {
+                tracing::error!(
+                    "unwanted 'kill' event while in worker loop; use WorkerTrigger::HaltTask first. ignoring."
+                );
+                continue;
+            }
+
+            // ===== acceptable events =====
+            WorkerTrigger::HaltTask => {
                 // clean up
-                tracing::info!("worker clean up");
-                token.send(()).ok();
+                tracing::warn!("worker halting");
                 break;
             }
 
@@ -285,11 +304,108 @@ async fn create_task(
                     try_catch.perform_microtask_checkpoint();
                 }
             }
+
+            WorkerTrigger::Refresh => {
+                // before this session dies out, we need to remove the global first
+                // let global = context.global(try_catch);
+
+                return Ok(true);
+            }
         }
     }
 
-    tracing::info!("worker task dropped");
-    Ok(())
+    Ok(false)
+}
+
+struct InitResult {
+    state: Arc<WorkerState>,
+    module: Global<Module>,
+    promise: Global<Promise>,
+}
+
+async fn init_worker_for_task(
+    worker_id: usize,
+    isolate: NonNull<OwnedIsolate>,
+    task: WorkerTask,
+    tx: WorkerTx,
+    monitor_handle: MonitorHandle,
+    state_handle: &mut Option<Arc<WorkerState>>,
+) -> Result<InitResult, WorkerError> {
+    let WorkerTask { source, platform } = task;
+
+    let Some(state) =
+        WorkerState::create_injected(platform, isolate, worker_id, tx, monitor_handle).await
+    else {
+        return Err(WorkerError::Unknown(
+            "failed to create worker state".to_string(),
+        ));
+    };
+
+    // we need to tell create_cancel_safe_task()
+    // that we've got a state here, and they can
+    // cancel it gracefully
+    state_handle.replace(state.clone());
+
+    tracing::info!("initializing environment for worker");
+
+    // environment initialization
+    let (module, promise) = {
+        scope_with_context!(
+            isolate: unsafe { state.get_isolate() },
+            let &mut scope,
+            let context
+        );
+        try_catch!(scope: scope, let try_catch);
+
+        let intrinsics_obj =
+            unwrap!(try_catch, some init intrinsics::build_intrinsics(&state.platform, try_catch));
+
+        // we're gonna put them in the global
+        {
+            let context_global = context.global(try_catch);
+            unwrap!(
+                try_catch,
+                some init intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj)
+            );
+        }
+
+        let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
+
+        state.tick_monitoring();
+
+        // instantiate imports, etc.
+        {
+            let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
+            if res.is_none() {
+                return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
+            }
+        }
+
+        // instantiate evaluations
+        let Some(promise) = module.evaluate(try_catch) else {
+            return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
+        };
+        let promise = promise.cast::<Promise>();
+
+        state.tick_monitoring();
+
+        (
+            Global::new(try_catch, module),
+            Global::new(try_catch, promise),
+        )
+    };
+
+    // we gotta wait for it to initialize
+    {
+        let isolate = unsafe { state.get_isolate() };
+        while Platform::pump_message_loop(&state.platform, isolate, false) {}
+    }
+
+    Ok(InitResult {
+        state,
+        module,
+        promise,
+    })
 }
 
 /// Gracefully closes the worker state, releasing memory.

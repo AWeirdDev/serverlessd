@@ -19,4 +19,7 @@ pub enum WorkerError {
 
     #[error("worker timeout")]
     Timeout,
+
+    #[error("unknown internal error: {0:#?}")]
+    Unknown(String),
 }

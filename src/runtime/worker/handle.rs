@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
 use crate::runtime::{
-    Pod, WorkerTask,
+    Pod,
     worker::{
         task::create_cancel_safe_task,
         trigger::{WorkerTrigger, WorkerTx},
@@ -16,14 +16,15 @@ pub struct WorkerHandle {
 }
 
 impl WorkerHandle {
+    /// Start a new worker.
     #[inline]
-    pub fn start(pod: &Pod, task: WorkerTask) -> Self {
+    pub fn start(pod: &Pod) -> Self {
         let (tx, rx) = mpsc::channel::<WorkerTrigger>(64);
 
         let monitor = pod.monitor.clone();
 
         pod.tasks
-            .spawn_local(create_cancel_safe_task(task, tx.clone(), rx, monitor));
+            .spawn_local(create_cancel_safe_task(tx.clone(), rx, monitor));
         Self { tx }
     }
 

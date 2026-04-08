@@ -1,10 +1,34 @@
 use tokio::sync::{mpsc, oneshot};
 
+use crate::runtime::WorkerTask;
+
 #[derive(Debug)]
 #[allow(unused)]
 pub enum WorkerTrigger {
-    Http { reply: oneshot::Sender<String> },
-    Halt { token: oneshot::Sender<()> },
+    /// Start a worker task.
+    StartTask {
+        id: usize,
+        task: WorkerTask,
+    },
+
+    /// Stop a task from running.
+    HaltTask,
+
+    Http {
+        reply: oneshot::Sender<String>,
+    },
+
+    /// Request an isolate refresh for later use.
+    Refresh,
+
+    /// Kill the isolate completely.
+    ///
+    /// # Warning
+    /// You may not kill the worker if it's not in
+    /// sleeping state. Use `WorkerTrigger::HaltTask` first.
+    Kill {
+        token: oneshot::Sender<()>,
+    },
 }
 
 pub type WorkerTx = mpsc::Sender<WorkerTrigger>;

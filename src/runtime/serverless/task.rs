@@ -66,7 +66,7 @@ pub(super) async fn serverless_task(
                                         continue;
                                     }
                                 };
-                                let result = serverless.create_worker(WorkerTask { source, platform: serverless.get_platform() }).await;
+                                let result = serverless.create_worker_task(WorkerTask { source, platform: serverless.get_platform() }).await;
                                 reply.send(result).ok();
                             }
                             ServerlessTrigger::ToPod { id, trigger } => {

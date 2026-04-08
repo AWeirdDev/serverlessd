@@ -13,8 +13,8 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
                 reply.send(pod.has_vacancy()).ok();
             }
 
-            PodTrigger::CreateWorker { task, reply } => {
-                let id = pod.create_worker(task);
+            PodTrigger::WarmUpWorker { reply } => {
+                let id = pod.create_worker();
                 reply.send(id).ok();
             }
 
@@ -24,22 +24,26 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
                 }
             }
 
-            PodTrigger::Halt { token } => {
+            PodTrigger::Kill { token } => {
+                tracing::info!("killing workers in this pod...");
                 for worker in pod.workers.drain(..) {
-                    tracing::info!("closing workers in this pod...");
-
-                    let (wtoken, recv) = oneshot::channel();
-
                     if let Some(worker) = worker {
-                        let _ = worker.trigger(WorkerTrigger::Halt { token: wtoken }).await;
+                        let (wtoken, recv) = oneshot::channel();
+                        let _ = worker.trigger(WorkerTrigger::HaltTask).await;
+                        let _ = worker.trigger(WorkerTrigger::Kill { token: wtoken }).await;
+                        recv.await.ok();
                     }
-
-                    recv.await.ok();
                 }
 
                 tracing::info!("all workers closed in this pod");
                 token.send(()).ok();
                 break;
+            }
+
+            PodTrigger::RemoveWorker { id } => {
+                if !pod.remove_worker(id) {
+                    tracing::error!("failed to remove worker of id: {}", id);
+                }
             }
         }
     }

@@ -84,7 +84,7 @@ impl Serverless {
         (ServerlessHandle::new(tx), handle)
     }
 
-    /// Get the platform from [`v8`].
+    /// Gets a clone of the shared reference from [`v8`].
     #[inline(always)]
     pub fn get_platform(&self) -> SharedRef<Platform> {
         self.platform.clone()
@@ -134,12 +134,17 @@ impl Serverless {
     /// - Failed to trigger pod
     /// - Failed to receive worker id under the designated pod
     #[must_use]
-    pub(super) async fn create_worker(&self, task: WorkerTask) -> Option<(usize, usize)> {
+    pub(super) async fn create_worker_task(&self, task: WorkerTask) -> Option<(usize, usize)> {
         let pod_id = self.find_vancancy().await?;
         let pod = unsafe { self.pods.get(pod_id).unwrap_unchecked() };
+        let pod_worker_id = pod.create_worker().await?;
 
-        let pod_worker_id = pod.create_worker(task).await?;
-        Some((pod_id, pod_worker_id))
+        let success = pod.assign_worker_task(pod_worker_id, task).await;
+        if success {
+            Some((pod_id, pod_worker_id))
+        } else {
+            None
+        }
     }
 
     #[inline]

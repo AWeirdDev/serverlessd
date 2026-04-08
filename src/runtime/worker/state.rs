@@ -14,7 +14,7 @@ use crate::runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerT
 
 type MaybeReplier = NonNull<Option<oneshot::Sender<String>>>;
 
-/// The worker state.
+/// The interior worker state.
 ///
 /// Internally, the state data should be stored in the isolate.
 pub struct WorkerState {
@@ -28,20 +28,25 @@ pub struct WorkerState {
 
 impl WorkerState {
     /// Create a new worker state, then inject state data to the isolate.
+    ///
+    /// # Safety
+    /// `isolate` must exist.
     #[inline(always)]
     pub async fn create_injected(
         platform: SharedRef<Platform>,
-        isolate: Box<OwnedIsolate>,
+        isolate: NonNull<OwnedIsolate>,
+        worker_id: usize,
         worker_tx: WorkerTx,
         monitor_handle: MonitorHandle,
     ) -> Option<Arc<Self>> {
-        let isolate_handle = isolate.thread_safe_handle();
+        let isolate_handle = unsafe { isolate.as_ref() }.thread_safe_handle();
+
         let slf = Arc::new(Self {
             tasks: TaskTracker::new(),
-            isolate: unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) },
+            isolate,
             platform,
             monitoring: monitor_handle
-                .start_monitoring(isolate_handle, worker_tx)
+                .start_monitoring(isolate_handle, worker_id, worker_tx)
                 .await?,
             extensions: WorkerStateExtensions::default(),
             repliers: RefCell::new(vec![]),

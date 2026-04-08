@@ -9,11 +9,12 @@ use tokio_util::task::TaskTracker;
 
 use v8::IsolateHandle;
 
-use crate::runtime::{WorkerTrigger, worker::WorkerTx};
+use crate::runtime::{PodHandle, WorkerTrigger, worker::WorkerTx};
 
 pub enum MonitorTrigger {
     Spawn {
         isolate_handle: IsolateHandle,
+        worker_id: usize,
         worker_tx: WorkerTx,
         reply: oneshot::Sender<Monitoring>,
     },
@@ -22,26 +23,26 @@ pub enum MonitorTrigger {
 type MonitorTx = mpsc::Sender<MonitorTrigger>;
 type MonitorRx = mpsc::Receiver<MonitorTrigger>;
 
+/// A monitor attached to a pod, which can be used to monitor threads.
 pub struct Monitor {
     // SAFETY: we don't need to get a stable memory address
     // # of pod workers will not increase
     tracker: TaskTracker,
+    pod_handle: PodHandle,
 }
 
 impl Monitor {
-    /// Creates a wall time monitor manager.
-    ///
-    /// To keep things simple, the monitor creates an uninitialized
-    /// [`Vec`] of memory with the capacity of `n_workers` assigned.
-    /// This is slightly different from a `Pod`, which initializes
-    /// only when needed, while allocating the same amount of memory.
-    pub fn new() -> Self {
+    /// Creates a worker wall time monitor that performs
+    /// monitoring on a different thread to ensure true parallelism.
+    #[inline]
+    pub fn new(pod_handle: PodHandle) -> Self {
         Self {
             tracker: TaskTracker::new(),
+            pod_handle,
         }
     }
 
-    /// Start monitoring. There is no need to `join()` the thread.
+    /// Start monitoring a worker. There is no need to `join()` the thread.
     /// Cancelling does not matter for this context.
     pub fn start(self) -> MonitorHandle {
         let (tx, rx) = mpsc::channel(1);
@@ -59,16 +60,22 @@ impl Monitor {
         MonitorHandle::new(tx)
     }
 
-    /// Spawns the monitor for `worker_id`.
+    /// Spawns the monitor for a worker.
     ///
     /// # Safety
     /// Worker of ID `worker_id` must exist.
     #[must_use]
-    fn spawn(&mut self, isolate_handle: IsolateHandle, worker_tx: WorkerTx) -> Monitoring {
+    fn spawn(
+        &mut self,
+        isolate_handle: IsolateHandle,
+        worker_id: usize,
+        worker_tx: WorkerTx,
+    ) -> Monitoring {
         let (tx, rx) = mpsc::channel(1);
 
         let mw = MonitoredWorker::new(isolate_handle, worker_tx, rx);
-        self.tracker.spawn_local(monitor_worker_task(mw));
+        self.tracker
+            .spawn_local(monitor_worker_task(mw, self.pod_handle.clone(), worker_id));
 
         Monitoring::new(tx)
     }
@@ -92,6 +99,7 @@ impl MonitorHandle {
     pub async fn start_monitoring(
         &self,
         isolate_handle: IsolateHandle,
+        worker_id: usize,
         worker_tx: WorkerTx,
     ) -> Option<Monitoring> {
         let (reply, recv) = oneshot::channel();
@@ -99,6 +107,7 @@ impl MonitorHandle {
             .send(MonitorTrigger::Spawn {
                 isolate_handle,
                 reply,
+                worker_id,
                 worker_tx,
             })
             .await
@@ -131,9 +140,10 @@ async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
             MonitorTrigger::Spawn {
                 isolate_handle,
                 reply,
+                worker_id,
                 worker_tx,
             } => {
-                let monitoring = monitor.spawn(isolate_handle, worker_tx);
+                let monitoring = monitor.spawn(isolate_handle, worker_id, worker_tx);
                 reply.send(monitoring).ok();
             }
         }
@@ -203,8 +213,11 @@ impl Monitoring {
     }
 }
 
-async fn monitor_worker_task(mut mw: MonitoredWorker) {
+async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id: usize) {
     let mut elapsed = Duration::default();
+
+    let walltime_tick = tokio::time::sleep(Duration::from_secs(10));
+    tokio::pin!(walltime_tick);
 
     while let Some(()) = mw.rx.recv().await {
         if elapsed.as_secs() > 10 {
@@ -216,13 +229,19 @@ async fn monitor_worker_task(mut mw: MonitoredWorker) {
 
         tokio::select! {
             // we still like the user at some point
+            // update: ok not really
             biased;
+
+            _ = &mut walltime_tick => {
+
+            }
 
             _ = mw.rx.recv() => {
                 let task_time = start.elapsed();
                 // tracing::info!("elapsed: {:?}", task_time);
                 elapsed += task_time;
             }
+
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
                 tracing::error!("(per task, 100ms) time's up");
                 break;
@@ -235,7 +254,14 @@ async fn monitor_worker_task(mut mw: MonitoredWorker) {
         tracing::error!("failed to terminate isolate when time's up (isolate already destroyed)");
     }
 
+    // first we halt the current task
+    mw.worker_tx.send(WorkerTrigger::HaltTask).await.ok();
+
+    // and then kill the whole isolate
     let (token, recv) = oneshot::channel();
-    mw.worker_tx.send(WorkerTrigger::Halt { token }).await.ok();
+    mw.worker_tx.send(WorkerTrigger::Kill { token }).await.ok();
     recv.await.ok();
+
+    // after we successfully killed it, we can essentially 'remove' this worker
+    let _ = pod.remove_worker(worker_id).await;
 }

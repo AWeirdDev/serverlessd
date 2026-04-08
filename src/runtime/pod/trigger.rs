@@ -1,6 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use crate::runtime::{WorkerTask, WorkerTrigger};
+use crate::runtime::WorkerTrigger;
 
 #[derive(Debug)]
 pub enum PodTrigger {
@@ -8,20 +8,30 @@ pub enum PodTrigger {
         reply: oneshot::Sender<bool>,
     },
 
-    /// Create a new worker within the pod.
-    CreateWorker {
-        task: WorkerTask,
-        reply: oneshot::Sender<usize>,
-    },
-
+    /// Send data to a worker.
     ToWorker {
         id: usize,
         trigger: WorkerTrigger,
     },
 
-    /// Stops the pod.
-    Halt {
+    /// Kill all workers in the pod.
+    Kill {
         token: oneshot::Sender<()>,
+    },
+
+    /// Warm up a worker.
+    ///
+    /// You can get then get the ID of the warmed worker.
+    WarmUpWorker {
+        reply: oneshot::Sender<usize>,
+    },
+
+    /// Remove a worker.
+    ///
+    /// At this point, the worker will be removed from the
+    /// array, and can no longer be accessed.
+    RemoveWorker {
+        id: usize,
     },
 }
 

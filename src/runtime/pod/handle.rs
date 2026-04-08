@@ -1,11 +1,12 @@
 use tokio::sync::oneshot;
 
 use crate::runtime::{
-    WorkerTask,
+    WorkerTask, WorkerTrigger,
     pod::{PodTrigger, trigger::PodTx},
 };
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct PodHandle {
     tx: PodTx,
 }
@@ -23,9 +24,9 @@ impl PodHandle {
     pub async fn halt(&self) -> bool {
         let (token, recv) = oneshot::channel();
 
-        tracing::info!("waiting for pod to halt...");
-        if !self.tx.send(PodTrigger::Halt { token }).await.is_ok() {
-            tracing::error!("failed to halt pod");
+        tracing::info!("waiting for pod to be killed...");
+        if !self.tx.send(PodTrigger::Kill { token }).await.is_ok() {
+            tracing::error!("failed to kill pod");
             return false;
         }
 
@@ -41,14 +42,32 @@ impl PodHandle {
         recv.await.ok().unwrap_or(false)
     }
 
-    /// Create a worker. Returns `Some(worker_id)` if successful.
-    pub async fn create_worker(&self, task: WorkerTask) -> Option<usize> {
+    /// Create and warm up a worker. Returns `Some(worker_id)` if successful.
+    pub async fn create_worker(&self) -> Option<usize> {
         let (reply, receive) = oneshot::channel::<usize>();
-        if !self.trigger(PodTrigger::CreateWorker { task, reply }).await {
+        if !self.trigger(PodTrigger::WarmUpWorker { reply }).await {
             return None;
         }
 
         receive.await.ok()
+    }
+
+    /// Assign a worker a task. Returns `true` if successful.
+    #[must_use]
+    pub async fn assign_worker_task(&self, id: usize, task: WorkerTask) -> bool {
+        let success = self
+            .trigger(PodTrigger::ToWorker {
+                id,
+                trigger: WorkerTrigger::StartTask { id, task },
+            })
+            .await;
+        if success { true } else { false }
+    }
+
+    #[must_use]
+    pub async fn remove_worker(&self, id: usize) -> bool {
+        let success = self.trigger(PodTrigger::RemoveWorker { id }).await;
+        if success { true } else { false }
     }
 
     #[inline(always)]
