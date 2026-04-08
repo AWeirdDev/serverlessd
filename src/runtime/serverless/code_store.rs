@@ -31,6 +31,7 @@ pub enum CodeStoreError {
 }
 
 /// Worker code store, using the filesystem.
+#[derive(Debug)]
 pub struct CodeStore;
 
 impl CodeStore {

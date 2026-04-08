@@ -25,6 +25,7 @@ use crate::runtime::{
 ///     10, // the number of workers per thread
 /// );
 /// ```
+#[derive(Debug)]
 pub struct Serverless {
     pub(super) n_threads: usize,
     pub(super) n_workers: usize,
@@ -135,7 +136,10 @@ impl Serverless {
     /// - Failed to receive worker id under the designated pod
     #[must_use]
     pub(super) async fn create_worker_task(&self, task: WorkerTask) -> Option<(usize, usize)> {
+        tracing::info!(?self, "finding vacancy");
         let pod_id = self.find_vancancy().await?;
+        tracing::info!("found vacancy! {pod_id}");
+
         let pod = unsafe { self.pods.get(pod_id).unwrap_unchecked() };
         let pod_worker_id = pod.create_worker().await?;
 

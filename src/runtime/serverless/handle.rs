@@ -23,7 +23,7 @@ impl ServerlessHandle {
     /// Notifies the serverless runtime to create a worker.
     #[must_use]
     pub async fn create_worker(&self, name: String) -> Option<(usize, usize)> {
-        tracing::info!("creating worker!");
+        tracing::info!("creating worker for {}", name);
 
         let (reply, receive) = oneshot::channel();
         self.tx

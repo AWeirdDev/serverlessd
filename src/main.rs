@@ -227,14 +227,7 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
         return;
     }
 
-    let Some((pod_id, pod_worker_id)) = svl.create_worker("index".to_string()).await else {
-        tracing::error!("failed to create one worker");
-        eprintln!("=====x error: failed to create one worker");
-        eprintln!("              this is usually due to a closed serverless runtime");
-        return;
-    };
-
-    tracing::info!("created one worker at {}:{}", pod_id, pod_worker_id);
+    println!("=====> worker uploaded. visit the url provided.");
 
     if let Err(e) = handle.await {
         tracing::error!(?e, "error while joining task handle");

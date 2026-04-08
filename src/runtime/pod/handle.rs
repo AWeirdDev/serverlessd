@@ -76,3 +76,9 @@ impl PodHandle {
         self.tx.send(trigger).await.is_ok()
     }
 }
+
+impl std::fmt::Debug for PodHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PodHandle")
+    }
+}
