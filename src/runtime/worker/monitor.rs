@@ -233,7 +233,9 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
             biased;
 
             _ = &mut walltime_tick => {
-
+                // oopsie daisy, time's up!
+                tracing::error!("(per worker, 10s) time's up");
+                break;
             }
 
             _ = mw.rx.recv() => {
