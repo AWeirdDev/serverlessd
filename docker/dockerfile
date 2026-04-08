@@ -1,0 +1,13 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    apt-get install -y ca-certificates libssl3 libstdc++6 libc6 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY serverlessd /usr/local/bin/serverlessd
+
+RUN chmod +x /usr/local/bin/serverlessd
+
+ENTRYPOINT ["serverlessd"]
