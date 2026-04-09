@@ -3,11 +3,12 @@ use tokio_util::task::TaskTracker;
 
 use crate::runtime::{
     Monitor, MonitorHandle, WorkerHandle,
-    pod::{PodTrigger, handle::PodHandle, task::pod_task},
+    pod::{PodTrigger, handle::PodHandle, task::pod_task, trigger::PodTx},
 };
 
 /// A thread containing multiple workers.
 pub struct Pod {
+    pub tx: PodTx,
     pub monitor: MonitorHandle,
     pub tasks: TaskTracker,
     pub(super) workers: Vec<Option<WorkerHandle>>,
@@ -18,9 +19,10 @@ impl Pod {
     /// Spawn a dedicated thread for managing workers.
     pub fn start(n_workers: usize) -> (PodHandle, task::JoinHandle<()>) {
         let (tx, rx) = mpsc::channel::<PodTrigger>(64);
-        let pod_handle = PodHandle::new(tx);
+        let pod_handle = PodHandle::new(tx.clone());
 
         let pod = Self {
+            tx: tx,
             workers: Vec::with_capacity(n_workers),
             vacancies: Vec::with_capacity(n_workers),
             tasks: TaskTracker::new(),
@@ -49,6 +51,7 @@ impl Pod {
         !self.vacancies.is_empty() || self.workers.len() < self.workers.capacity()
     }
 
+    #[inline(always)]
     pub fn get_next_worker_id(&mut self) -> usize {
         self.vacancies.pop().unwrap_or({
             let ln = self.workers.len();

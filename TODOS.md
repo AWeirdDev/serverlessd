@@ -1,1 +1,3 @@
 - add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
+- extensions
+- time advancement

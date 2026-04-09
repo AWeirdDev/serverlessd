@@ -40,7 +40,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
                 break;
             }
 
-            PodTrigger::RemoveWorker { id } => {
+            PodTrigger::MarkWorkerAsVacant { id } => {
                 if !pod.remove_worker(id) {
                     tracing::error!("failed to remove worker of id: {}", id);
                 }

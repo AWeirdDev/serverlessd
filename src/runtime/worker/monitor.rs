@@ -265,5 +265,5 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
     recv.await.ok();
 
     // after we successfully killed it, we can essentially 'remove' this worker
-    let _ = pod.remove_worker(worker_id).await;
+    let _ = pod.mark_worker_as_vacant(worker_id).await;
 }

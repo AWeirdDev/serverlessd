@@ -5,4 +5,4 @@ mod trigger;
 
 pub use core::Pod;
 pub use handle::PodHandle;
-pub use trigger::PodTrigger;
+pub use trigger::{PodTrigger, PodTx};

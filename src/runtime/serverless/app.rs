@@ -97,7 +97,7 @@ async fn api_upload_worker(req: &mut Request, res: &mut Response, depot: &Depot)
 async fn api_remove_worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     let worker_name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
-    state.serverless.remove_worker(worker_name).await;
+    state.serverless.remove_worker_code(worker_name).await;
 
     res.render(Json(json!({"ok": true})));
 }

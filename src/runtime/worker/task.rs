@@ -7,7 +7,7 @@ use crate::{
     compile, intrinsics,
     language::{ExceptionDetails, ExceptionDetailsExt, Promised},
     runtime::{
-        WorkerState,
+        PodTrigger, PodTx, WorkerState,
         worker::{
             MonitorHandle, WorkerTx,
             error::WorkerError,
@@ -72,6 +72,7 @@ pub struct WorkerTask {
 }
 
 pub(super) async fn create_cancel_safe_task(
+    pod_tx: PodTx,
     tx: WorkerTx,
     mut rx: WorkerRx,
     monitor_handle: MonitorHandle,
@@ -96,6 +97,12 @@ pub(super) async fn create_cancel_safe_task(
                     &mut state_handle,
                 )
                 .await;
+
+                // at this point, the work is done
+                pod_tx
+                    .send(PodTrigger::MarkWorkerAsVacant { id })
+                    .await
+                    .ok();
 
                 match result {
                     Ok(should_restart) => {

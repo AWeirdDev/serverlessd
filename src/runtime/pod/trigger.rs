@@ -30,7 +30,7 @@ pub enum PodTrigger {
     ///
     /// At this point, the worker will be removed from the
     /// array, and can no longer be accessed.
-    RemoveWorker {
+    MarkWorkerAsVacant {
         id: usize,
     },
 }

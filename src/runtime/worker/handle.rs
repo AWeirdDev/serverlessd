@@ -23,8 +23,12 @@ impl WorkerHandle {
 
         let monitor = pod.monitor.clone();
 
-        pod.tasks
-            .spawn_local(create_cancel_safe_task(tx.clone(), rx, monitor));
+        pod.tasks.spawn_local(create_cancel_safe_task(
+            pod.tx.clone(),
+            tx.clone(),
+            rx,
+            monitor,
+        ));
         Self { tx }
     }
 

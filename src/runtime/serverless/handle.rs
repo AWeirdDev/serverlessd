@@ -51,7 +51,7 @@ impl ServerlessHandle {
 
     /// Remove worker code.
     #[inline]
-    pub async fn remove_worker(&self, name: String) -> Option<()> {
+    pub async fn remove_worker_code(&self, name: String) -> Option<()> {
         self.trigger(ServerlessTrigger::RemoveWorkerCode { name })
             .await
     }

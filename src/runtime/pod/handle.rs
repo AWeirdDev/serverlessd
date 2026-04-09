@@ -55,18 +55,16 @@ impl PodHandle {
     /// Assign a worker a task. Returns `true` if successful.
     #[must_use]
     pub async fn assign_worker_task(&self, id: usize, task: WorkerTask) -> bool {
-        let success = self
-            .trigger(PodTrigger::ToWorker {
-                id,
-                trigger: WorkerTrigger::StartTask { id, task },
-            })
-            .await;
-        if success { true } else { false }
+        self.trigger(PodTrigger::ToWorker {
+            id,
+            trigger: WorkerTrigger::StartTask { id, task },
+        })
+        .await
     }
 
     #[must_use]
-    pub async fn remove_worker(&self, id: usize) -> bool {
-        let success = self.trigger(PodTrigger::RemoveWorker { id }).await;
+    pub async fn mark_worker_as_vacant(&self, id: usize) -> bool {
+        let success = self.trigger(PodTrigger::MarkWorkerAsVacant { id }).await;
         if success { true } else { false }
     }
 
