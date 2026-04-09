@@ -49,7 +49,7 @@ fn main() {
     fs::write(
         format!("{}/files.rs", env::var("OUT_DIR").unwrap()),
         format!(
-            "#![rustfmt::skip]\npub(super) const FILES: [(&'static str, &'static str); {0}] = [{1}];\n",
+            "#[rustfmt::skip]\npub(super) const FILES: [(&'static str, &'static str); {0}] = [{1}];\n",
             arr.len(),
             arr.join(", ")
         ),
