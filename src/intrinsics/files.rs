@@ -4,7 +4,7 @@
 include!(concat!(env!("OUT_DIR"), "/files.rs"));
 
 #[inline]
-pub(super) fn get_intrinsics_file(name: &str) -> Option<&str> {
+pub(super) fn get_builtin_file(name: &str) -> Option<&str> {
     FILES
         .iter()
         .find(|(filename, _)| *filename == name)

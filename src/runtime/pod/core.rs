@@ -7,6 +7,7 @@ use crate::runtime::{
 };
 
 /// A thread containing multiple workers.
+#[derive(Debug)]
 pub struct Pod {
     pub tx: PodTx,
     pub monitor: MonitorHandle,
@@ -47,12 +48,17 @@ impl Pod {
     }
 
     #[inline(always)]
-    pub const fn has_vacancy(&self) -> bool {
+    pub fn has_vacancy(&self) -> bool {
         !self.vacancies.is_empty() || self.workers.len() < self.workers.capacity()
     }
 
     #[inline(always)]
     pub fn get_next_worker_id(&mut self) -> usize {
+        tracing::info!(
+            "GET NEXT WORKER ID, current workers: {:?}, vacancies: {:?}",
+            self.workers.len(),
+            self.vacancies
+        );
         self.vacancies.pop().unwrap_or({
             let ln = self.workers.len();
             self.workers.push(None);
@@ -67,7 +73,7 @@ impl Pod {
     }
 
     pub fn remove_worker(&mut self, id: usize) -> bool {
-        if let Some(worker) = self.workers.get_mut(id) {
+        if let Some(worker @ Some(_)) = self.workers.get_mut(id) {
             let _ = unsafe { worker.take().unwrap_unchecked() };
             self.vacancies.push(id);
 

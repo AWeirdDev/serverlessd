@@ -84,7 +84,7 @@ impl Monitor {
 /// A monitor handle for communicating with the monitor
 /// task. You can request to monitor a worker with this.
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MonitorHandle {
     tx: MonitorTx,
 }

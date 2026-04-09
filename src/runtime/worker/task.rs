@@ -121,6 +121,7 @@ pub(super) async fn create_cancel_safe_task(
             }
 
             WorkerTrigger::Kill { token } => {
+                tracing::info!("received signal KILL at sleep");
                 // drop the isolate, JUST IN CASE I FORGET
                 let _ = unsafe { Box::from_raw(isolate_ptr.as_ptr()) };
                 tracing::info!("isolate is shut down.");
@@ -418,8 +419,8 @@ async fn init_worker_for_task(
 /// Gracefully closes the worker state, releasing memory.
 #[inline]
 async fn close_state(state: Arc<WorkerState>) {
-    let mut isolate = unsafe { Box::from_raw(state.isolate.as_ptr()) };
-    let state2 = WorkerState::open_from_isolate(&mut isolate);
+    let isolate = unsafe { &mut *state.isolate.as_ptr() };
+    let state2 = WorkerState::open_from_isolate(isolate);
     state2.wait_close().await;
 
     // at this point, state & state2 gets dropped

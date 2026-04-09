@@ -7,7 +7,7 @@ use v8::{
 
 use crate::{
     compile::compile_module,
-    intrinsics::{self, files::get_intrinsics_file},
+    intrinsics::{self, files::get_builtin_file},
     scope_with_context,
 };
 
@@ -48,11 +48,7 @@ fn resolve_module_callback_intrinsics<'a>(
         return None;
     }
 
-    let name = specifier_str
-        .split_once(":")
-        .unwrap_or(("intrinsics:", ""))
-        .1;
-    let Some(code) = get_intrinsics_file(name) else {
+    let Some(code) = get_builtin_file(&specifier_str) else {
         return None;
     };
 
@@ -101,7 +97,7 @@ pub fn build_intrinsics(
             intrinsics_obj.cast(),
         );
 
-        let source = get_intrinsics_file("index")?;
+        let source = get_builtin_file("intrinsics:index")?;
 
         let module = compile_module(scope, source, "index")?;
         module.instantiate_module(scope, resolve_module_callback_intrinsics)?;
