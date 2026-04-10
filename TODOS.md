@@ -1,4 +1,4 @@
 - [x] add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
-- [ ] URGENT: FIX LOGIC FOR CHECKING VACANCIES AND ADDING WORKERS, SOMETHING ISN'T RIGHT. I think I saw that you can add MORE workers than the capacity. fuck.
+- [x] URGENT: FIX LOGIC FOR CHECKING VACANCIES AND ADDING WORKERS, SOMETHING ISN'T RIGHT. I think I saw that you can add MORE workers than the capacity. fuck.
 - [ ] extensions
 - [ ] time advancement

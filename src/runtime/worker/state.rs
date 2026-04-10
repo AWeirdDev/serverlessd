@@ -130,6 +130,7 @@ impl WorkerState {
         }
     }
 
+    /// Gets the next replier index to use for safe dropping.
     pub fn get_next_replier_idx(&self) -> usize {
         self.cleanup_dead_repliers();
         let mut repliers = self.repliers.borrow_mut();
@@ -156,7 +157,7 @@ impl WorkerState {
     /// Add a replier to the `idx`.
     ///
     /// # Safety
-    /// Index of `idx` must exist.
+    /// Index of `idx` must exist. You can use `get_next_replier_idx()`.
     pub fn add_replier(&self, idx: usize, replier: *mut Option<oneshot::Sender<String>>) {
         let mut repliers = self.repliers.borrow_mut();
         let shell = unsafe { repliers.get_mut(idx).unwrap_unchecked() };

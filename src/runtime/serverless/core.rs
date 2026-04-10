@@ -137,7 +137,7 @@ impl Serverless {
     /// - Failed to receive worker id under the designated pod
     #[must_use]
     pub(super) async fn create_worker_task(&self, task: WorkerTask) -> Option<(usize, usize)> {
-        tracing::info!(?self, "finding vacancy");
+        tracing::info!("finding vacancy");
         let pod_id = self.find_vancancy().await?;
         tracing::info!("found vacancy! {pod_id}");
 

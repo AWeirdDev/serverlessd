@@ -48,7 +48,7 @@ impl Pod {
     }
 
     #[inline(always)]
-    pub fn has_vacancy(&self) -> bool {
+    pub fn has_vacancies(&self) -> bool {
         !self.vacancies.is_empty() || self.workers.len() < self.workers.capacity()
     }
 

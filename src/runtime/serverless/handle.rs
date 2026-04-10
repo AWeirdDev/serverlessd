@@ -69,7 +69,18 @@ impl ServerlessHandle {
         })
         .await?;
 
-        recv.await.ok()
+        // we need to turn it into a sleeping state first
+        let result = recv.await.ok()?;
+        self.trigger(ServerlessTrigger::ToPod {
+            id: pod,
+            trigger: PodTrigger::ToWorker {
+                id: wrk,
+                trigger: WorkerTrigger::HaltTask,
+            },
+        })
+        .await?;
+
+        Some(result)
     }
 
     /// Trigger the serverless runtime.

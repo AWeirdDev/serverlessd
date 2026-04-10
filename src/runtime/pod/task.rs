@@ -10,7 +10,12 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
     while let Some(event) = rx.recv().await {
         match event {
             PodTrigger::CheckVacancies { reply } => {
-                reply.send(pod.has_vacancy()).ok();
+                tracing::info!(
+                    "pod checking vacancies\nvacancies: {:?}\nworkers: {:?}",
+                    pod.vacancies,
+                    pod.workers
+                );
+                reply.send(pod.has_vacancies()).ok();
             }
 
             PodTrigger::WarmUpWorker { reply } => {

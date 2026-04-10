@@ -270,13 +270,13 @@ async fn create_task(
                     }
                     let promise = result.cast::<v8::Promise>();
 
-                    tracing::info!("replier");
+                    // replier still exists
                     let replier_handle = Box::new(Some(reply));
+
                     let replier_ptr = Box::into_raw(replier_handle);
                     let idx = state.get_next_replier_idx();
                     state.add_replier(idx, replier_ptr);
 
-                    tracing::info!("===> .then()");
                     promise.then(
                         try_catch,
                         unwrap!(
