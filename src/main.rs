@@ -47,6 +47,9 @@ enum Command {
     /// Upload a worker in this working directory,
     /// instead of HTTP.
     Upload(UploadArgs),
+
+    /// Initialize the environment in this directory.
+    Init,
 }
 
 #[derive(clap::Args)]
@@ -206,9 +209,41 @@ fn main() {
                 Err(e) => {
                     eprintln!("=====x error: failed to write {:?}", &args.file);
                     eprintln!("       error: {}", &e.to_string());
+                    eprintln!("       help:  use `init` to initialize an environment.");
                     return;
                 }
             }
+        }
+
+        Command::Init => {
+            let workers_path = PathBuf::from(".serverlessd/workers");
+            if !workers_path.exists() {
+                if let Err(e) = fs::create_dir_all(&workers_path) {
+                    eprintln!("=====x error: failed to create dir {:?}", &workers_path);
+                    eprintln!("       error: {}", &e.to_string());
+                    return;
+                }
+
+                println!("=====> created dir {:?}", &workers_path);
+            }
+
+            let env_path = PathBuf::from(".env");
+            if env_path.exists() {
+                println!("=====! .env file already exists in this directory, add:\n");
+                println!("          SERVERLESSD_SECRET=<some-32-byte-secret>\n");
+                println!("       ...in order to start the server.");
+            } else {
+                if let Err(e) = fs::write(&env_path, "SERVERLESSD_SECRET=xxx") {
+                    eprintln!("=====x error: failed to create env file {:?}", &env_path);
+                    eprintln!("       error: {}", &e.to_string());
+                    return;
+                }
+
+                println!("=====> env file created at {:?}", &env_path);
+                println!("       edit it and add your 32-byte secret");
+            }
+
+            println!("\n=====> initialized. use `.gitignore` if you're using git version control.");
         }
     }
 }
