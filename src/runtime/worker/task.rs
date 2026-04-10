@@ -114,16 +114,16 @@ pub(super) async fn create_cancel_safe_task(
                     .await
                     .ok();
 
-                if let Some(state) = state_handle {
-                    tracing::info!("closing state");
-                    close_state(state).await;
-                }
-
                 match result {
                     Ok(should_restart) => {
                         if !should_restart {
                             drop_isolate(isolate_ptr);
                             break;
+                        }
+
+                        if let Some(state) = state_handle {
+                            tracing::info!("closing state");
+                            close_state(state).await;
                         }
                     }
                     Err(err) => {

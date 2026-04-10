@@ -18,7 +18,7 @@ pub struct WorkerHandle {
 impl WorkerHandle {
     /// Start a new worker.
     #[inline]
-    pub fn start(pod: &Pod) -> Self {
+    pub fn start(pod: &mut Pod) -> Self {
         let (tx, rx) = mpsc::channel::<WorkerTrigger>(64);
 
         let monitor_handle = pod.monitor.clone();

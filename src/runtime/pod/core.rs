@@ -1,5 +1,7 @@
-use tokio::{sync::mpsc, task};
-use tokio_util::task::TaskTracker;
+use tokio::{
+    sync::mpsc,
+    task::{self, JoinSet},
+};
 
 use crate::runtime::{
     Monitor, MonitorHandle, WorkerHandle,
@@ -11,7 +13,7 @@ use crate::runtime::{
 pub struct Pod {
     pub tx: PodTx,
     pub monitor: MonitorHandle,
-    pub tasks: TaskTracker,
+    pub tasks: JoinSet<()>,
     pub(super) workers: Vec<Option<WorkerHandle>>,
     pub(super) vacancies: Vec<usize>,
 }
@@ -26,7 +28,7 @@ impl Pod {
             tx: tx,
             workers: Vec::with_capacity(n_workers),
             vacancies: Vec::with_capacity(n_workers),
-            tasks: TaskTracker::new(),
+            tasks: JoinSet::new(),
             monitor: {
                 let m = Monitor::new(pod_handle.clone());
                 m.start()
