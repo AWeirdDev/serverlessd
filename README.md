@@ -1,19 +1,24 @@
+<div align="center">
+
 # serverlessd
+![github build](https://img.shields.io/github/actions/workflow/status/AWeirdDev/serverlessd/ci.yml)
+
+</div>
+
 Serverless workers management architecture. **Work in progress**.
-The publicity is just for quicker sharing.
 
-**Unimplemented**:
+I'm working on the "automatic scaling" part now, just to be clear.
 
-To start a worker locally:
+You can use this for:
+
+- Getting a local serverless runtime up and running
+- Custom LLM toolkit for fast execution
+
+To start:
 
 ```sh
-$ serverlessd one my-worker.js
-```
-
-To start a whole system for managing multiple workers:
-
-```rs
-$ serverlessd start --threads 10
+$ serverlessd run --n-pods 10 --n-workers-per-pod 2
+=====> server started at http://127.0.0.1:3000
 ```
 
 ***
@@ -23,9 +28,9 @@ $ serverlessd start --threads 10
 
 這個專案讓你可以在不需要管理伺服器的情況下執行 JavaScript。
 
-你只需要寫一段程式：
+基本上寫一段程式：
 - 有請求進來時就執行
-- 自動擴展
+- 自動做資源擴展
 - 用完就結束
 
 概念類似 [Cloudflare Workers](https://developers.cloudflare.com/workers)。
