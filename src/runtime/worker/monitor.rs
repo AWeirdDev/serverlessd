@@ -264,6 +264,7 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
     mw.worker_tx.send(WorkerTrigger::Kill { token }).await.ok();
     recv.await.ok();
 
+    tracing::info!("shutting down, marking worker as vacant");
     // after we successfully killed it, we can essentially 'remove' this worker
     let _ = pod.mark_worker_as_vacant(worker_id).await;
 }

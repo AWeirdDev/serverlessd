@@ -9,7 +9,7 @@ use crate::runtime::{
 };
 
 /// A handle to the serverless worker.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 #[repr(transparent)]
 pub struct WorkerHandle {
     tx: WorkerTx,

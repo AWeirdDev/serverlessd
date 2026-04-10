@@ -14,7 +14,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
             }
 
             PodTrigger::WarmUpWorker { reply } => {
-                let id = pod.create_worker();
+                let id = pod.create_and_warmup_worker();
                 reply.send(id).ok();
             }
 

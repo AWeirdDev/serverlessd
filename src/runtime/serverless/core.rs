@@ -95,6 +95,7 @@ impl Serverless {
     async fn find_vancancy(&self) -> Option<usize> {
         for (idx, pod) in self.pods.iter().enumerate() {
             if pod.has_vacancies().await {
+                tracing::info!("found pod {} has a vacancy!", idx);
                 return Some(idx);
             }
         }
@@ -141,7 +142,7 @@ impl Serverless {
         tracing::info!("found vacancy! {pod_id}");
 
         let pod = unsafe { self.pods.get(pod_id).unwrap_unchecked() };
-        let pod_worker_id = pod.create_worker().await?;
+        let pod_worker_id = pod.create_and_warmup_worker().await?;
 
         let success = pod.assign_worker_task(pod_worker_id, task).await;
         if success {

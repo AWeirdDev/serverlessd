@@ -52,14 +52,11 @@ impl Pod {
         !self.vacancies.is_empty() || self.workers.len() < self.workers.capacity()
     }
 
+    /// Get the next worker ID.
+    /// You **must** check if this pod has a vacancy.
     #[inline(always)]
     pub fn get_next_worker_id(&mut self) -> usize {
-        tracing::info!(
-            "GET NEXT WORKER ID, current workers: {:?}, vacancies: {:?}",
-            self.workers.len(),
-            self.vacancies
-        );
-        self.vacancies.pop().unwrap_or({
+        self.vacancies.pop().unwrap_or_else(|| {
             let ln = self.workers.len();
             self.workers.push(None);
             ln
@@ -73,11 +70,14 @@ impl Pod {
     }
 
     pub fn remove_worker(&mut self, id: usize) -> bool {
-        if let Some(worker @ Some(_)) = self.workers.get_mut(id) {
-            let _ = unsafe { worker.take().unwrap_unchecked() };
-            self.vacancies.push(id);
-
-            true
+        if let Some(worker) = self.workers.get_mut(id) {
+            let res = worker.take();
+            if res.is_some() {
+                self.vacancies.push(id);
+                true
+            } else {
+                false
+            }
         } else {
             false
         }
@@ -95,7 +95,7 @@ impl Pod {
     /// Create & start a new worker instance, then return the handle.
     #[inline]
     #[must_use]
-    pub(super) fn create_worker(&mut self) -> usize {
+    pub(super) fn create_and_warmup_worker(&mut self) -> usize {
         let worker = WorkerHandle::start(self);
 
         let id = self.get_next_worker_id();

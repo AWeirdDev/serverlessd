@@ -43,7 +43,7 @@ impl PodHandle {
     }
 
     /// Create and warm up a worker. Returns `Some(worker_id)` if successful.
-    pub async fn create_worker(&self) -> Option<usize> {
+    pub async fn create_and_warmup_worker(&self) -> Option<usize> {
         let (reply, receive) = oneshot::channel::<usize>();
         if !self.trigger(PodTrigger::WarmUpWorker { reply }).await {
             return None;
