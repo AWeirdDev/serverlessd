@@ -5,6 +5,8 @@
 
 </div>
 
+<br />
+
 Serverless workers management architecture. **Work in progress**.
 
 I'm working on the "automatic scaling" part now, just to be clear.
