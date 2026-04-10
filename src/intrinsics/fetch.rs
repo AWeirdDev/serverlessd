@@ -9,7 +9,6 @@ use v8::{Global, Local, Object, PromiseResolver};
 use crate::{
     language::{ThrowException, throw},
     runtime::WorkerState,
-    scope_with_context,
 };
 
 macro_rules! some {
@@ -67,7 +66,7 @@ pub fn fetch(
     if args.length() == 0 {
         let exc = throw(
             scope,
-            ThrowException::TypeError("fetch: At least 1 argument required, but only 0 passed"),
+            ThrowException::type_error("fetch: At least 1 argument required, but only 0 passed"),
         );
         let resolver = v8::PromiseResolver::new(scope).unwrap();
         resolver.reject(scope, exc);
@@ -99,7 +98,7 @@ pub fn fetch(
         // this is to align with Rust reqwest's behaviors
         // fuck it
         ok!(Method::from_str(&meth_name), else (scope, rv) => {
-            throw(scope, ThrowException::TypeError("fetch: Invalid method"))
+            throw(scope, ThrowException::type_error("fetch: Invalid method"))
         })
     } else {
         Method::GET
@@ -144,7 +143,6 @@ pub fn fetch(
     }
 
     let resolver = some!(PromiseResolver::new(scope));
-
     let gresolver = Global::new(scope, resolver);
     let fut = {
         let state2 = state.clone();
@@ -153,38 +151,21 @@ pub fn fetch(
 
             let result = rq.send().await;
 
-            let isolate = unsafe { state2.get_isolate() };
             match result {
                 Ok(_resp) => {
-                    scope_with_context!(
-                        isolate: isolate,
-                        let &mut scope,
-                        let context
+                    state2.schedule_resolution(
+                        gresolver,
+                        Ok(Box::new(move |scope| {
+                            Local::new(scope, v8::null(scope).cast())
+                        })),
                     );
-
-                    let resolver = Local::new(scope, gresolver);
-                    state2.tick_monitoring();
-                    resolver.resolve(scope, v8::null(scope).cast());
-                    tracing::info!("resolved.")
                 }
 
                 Err(err) => {
                     let details = err.to_string();
-
-                    let isolate = unsafe { state2.get_isolate() };
-                    scope_with_context!(
-                        isolate: isolate,
-                        let &mut scope,
-                        let context
-                    );
-
-                    let resolver = Local::new(scope, gresolver);
-                    state2.tick_monitoring();
-                    resolver.reject(scope, throw(scope, ThrowException::Error(details)));
+                    state2.schedule_resolution(gresolver, Err(ThrowException::Error(details)));
                 }
             }
-
-            isolate.perform_microtask_checkpoint();
         })
     };
     state.tasks.spawn_local(fut);

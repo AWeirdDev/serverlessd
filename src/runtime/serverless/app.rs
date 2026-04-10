@@ -28,7 +28,7 @@ pub(super) async fn start_server(
         .push(Router::with_path("/worker/{name}/{**rest}").get(worker))
         .push(Router::with_path("{**}").goal(wildcard));
 
-    println!("=====> server started at {}", addr);
+    println!("=====> server started at http://{}", addr);
     Server::new(listener)
         .serve(Service::new(router).catcher(Catcher::default().hoop(handle_error)))
         .await;

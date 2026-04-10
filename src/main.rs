@@ -216,7 +216,7 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
     let serverless = Serverless::new_one();
 
     let worker_id = uuid::Uuid::new_v4().to_string();
-    let worker_url = format!("{}/worker/{}", addr, worker_id);
+    let worker_url = format!("http://{}/worker/{}", addr, worker_id);
 
     let (svl, handle) = serverless.start(addr, secret);
 

@@ -1,5 +1,6 @@
 use std::{
     cell::{OnceCell, RefCell},
+    collections::VecDeque,
     ffi::c_void,
     ptr::NonNull,
     sync::Arc,
@@ -8,17 +9,27 @@ use std::{
 use reqwest::Client;
 use tokio::sync::oneshot;
 use tokio_util::task::TaskTracker;
-use v8::{Isolate, OwnedIsolate, Platform, SharedRef};
+use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
-use crate::runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx};
+use crate::{
+    language::ThrowException,
+    runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx},
+};
 
 type MaybeReplier = NonNull<Option<oneshot::Sender<String>>>;
+
+type ResolutionCallback =
+    Box<dyn for<'s> FnOnce(&mut v8::PinScope<'s, '_>) -> v8::Local<'s, v8::Value>>;
+type ResolutionResult = Result<ResolutionCallback, ThrowException>;
+type PendingResolution = (Global<PromiseResolver>, ResolutionResult);
 
 /// The interior worker state.
 ///
 /// Internally, the state data should be stored in the isolate.
 pub struct WorkerState {
     pub tasks: TaskTracker,
+    pub pending_resolutions: RefCell<VecDeque<PendingResolution>>,
+
     pub isolate: NonNull<OwnedIsolate>,
     pub platform: SharedRef<Platform>,
     pub monitoring: Monitoring,
@@ -43,6 +54,8 @@ impl WorkerState {
 
         let slf = Arc::new(Self {
             tasks: TaskTracker::new(),
+            pending_resolutions: RefCell::new(VecDeque::new()),
+
             isolate,
             platform,
             monitoring: monitor_handle
@@ -164,6 +177,14 @@ impl WorkerState {
         let ptr = unsafe { NonNull::new_unchecked(replier) };
         shell.replace(ptr);
     }
+
+    /// Schedule promise resolution.
+    #[inline]
+    pub fn schedule_resolution(&self, resolver: Global<PromiseResolver>, result: ResolutionResult) {
+        self.pending_resolutions
+            .borrow_mut()
+            .push_back((resolver, result));
+    }
 }
 
 impl Drop for WorkerState {
@@ -183,6 +204,7 @@ impl Drop for WorkerState {
     }
 }
 
+// ====== state extensions =====
 #[derive(Default)]
 pub struct WorkerStateExtensions {
     client: OnceCell<Client>,

@@ -5,7 +5,7 @@ use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Prom
 
 use crate::{
     compile, intrinsics,
-    language::{ExceptionDetails, ExceptionDetailsExt, Promised},
+    language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw},
     runtime::{
         PodTrigger, PodTx, WorkerState,
         worker::{
@@ -71,11 +71,20 @@ pub struct WorkerTask {
     pub platform: SharedRef<Platform>,
 }
 
+pub struct WarmUpWorkerArgs {
+    pub pod_tx: PodTx,
+    pub worker_tx: WorkerTx,
+    pub worker_rx: WorkerRx,
+    pub monitor_handle: MonitorHandle,
+}
+
 pub(super) async fn create_cancel_safe_task(
-    pod_tx: PodTx,
-    tx: WorkerTx,
-    mut rx: WorkerRx,
-    monitor_handle: MonitorHandle,
+    WarmUpWorkerArgs {
+        pod_tx,
+        worker_tx: tx,
+        worker_rx: mut rx,
+        monitor_handle,
+    }: WarmUpWorkerArgs,
 ) {
     let mut isolate = Box::new(v8::Isolate::new(Default::default()));
     isolate.set_microtasks_policy(v8::MicrotasksPolicy::Auto);
@@ -97,6 +106,7 @@ pub(super) async fn create_cancel_safe_task(
                     &mut state_handle,
                 )
                 .await;
+                tracing::info!("task finished, marking worker as vacant");
 
                 // at this point, the work is done
                 pod_tx
@@ -104,9 +114,15 @@ pub(super) async fn create_cancel_safe_task(
                     .await
                     .ok();
 
+                if let Some(state) = state_handle {
+                    tracing::info!("closing state");
+                    close_state(state).await;
+                }
+
                 match result {
                     Ok(should_restart) => {
                         if !should_restart {
+                            drop_isolate(isolate_ptr);
                             break;
                         }
                     }
@@ -114,19 +130,13 @@ pub(super) async fn create_cancel_safe_task(
                         tracing::error!("got error on closed handler, {:?}", err);
                     }
                 }
-
-                if let Some(state) = state_handle {
-                    close_state(state).await;
-                }
             }
 
             WorkerTrigger::Kill { token } => {
                 tracing::info!("received signal KILL at sleep");
-                // drop the isolate, JUST IN CASE I FORGET
-                let _ = unsafe { Box::from_raw(isolate_ptr.as_ptr()) };
-                tracing::info!("isolate is shut down.");
+                drop_isolate(isolate_ptr);
                 token.send(()).ok();
-                break;
+                return;
             }
 
             _ => {
@@ -137,6 +147,13 @@ pub(super) async fn create_cancel_safe_task(
             }
         }
     }
+}
+
+#[inline(always)]
+fn drop_isolate(isolate_ptr: NonNull<OwnedIsolate>) {
+    tracing::info!("dropping isolate!");
+    let _ = unsafe { Box::from_raw(isolate_ptr.as_ptr()) };
+    tracing::info!("isolate is shut down.");
 }
 
 /// Create a task for running this worker.
@@ -230,7 +247,26 @@ async fn create_task(
 
     tracing::info!("worker now started, waiting for events");
     while let Some(event) = rx.recv().await {
+        {
+            let mut resolutions = state.pending_resolutions.borrow_mut();
+            while let Some((gresolver, result)) = resolutions.pop_front() {
+                let resolver = Local::new(try_catch, gresolver);
+                match result {
+                    Ok(callback) => {
+                        let cb = callback(try_catch);
+                        let value = Local::new(try_catch, cb);
+
+                        resolver.resolve(try_catch, value);
+                    }
+                    Err(err) => {
+                        let err = Local::new(try_catch, throw(try_catch, err));
+                        resolver.reject(try_catch, err);
+                    }
+                }
+            }
+        }
         try_catch.perform_microtask_checkpoint();
+
         state.cleanup_dead_repliers();
 
         match event {
