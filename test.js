@@ -1,5 +1,7 @@
+var one = 0;
+
 export default {
   async fetch() {
-    return "hello, world!";
+    fetch("https://github.com/AWeirdDev");
   },
 };

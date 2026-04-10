@@ -2,3 +2,4 @@
 - [x] URGENT: FIX LOGIC FOR CHECKING VACANCIES AND ADDING WORKERS, SOMETHING ISN'T RIGHT. I think I saw that you can add MORE workers than the capacity. fuck.
 - [ ] extensions
 - [ ] time advancement
+- [ ] worker custom environment variables

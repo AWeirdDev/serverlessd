@@ -11,7 +11,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
         match event {
             PodTrigger::CheckVacancies { reply } => {
                 tracing::info!(
-                    "pod checking vacancies\nvacancies: {:?}\nworkers: {:?}",
+                    "pod checking vacancies, vacancies: {:?}, workers: {:?}",
                     pod.vacancies,
                     pod.workers
                 );

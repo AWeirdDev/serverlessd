@@ -215,10 +215,13 @@ fn main() {
 async fn start_one(source: String, addr: SocketAddr, secret: String) {
     let serverless = Serverless::new_one();
 
+    let worker_id = uuid::Uuid::new_v4().to_string();
+    let worker_url = format!("{}/worker/{}", addr, worker_id);
+
     let (svl, handle) = serverless.start(addr, secret);
 
     let res = svl
-        .upload_worker("index".to_string(), Bytes::from_owner(source))
+        .upload_worker(worker_id.to_string(), Bytes::from_owner(source))
         .await;
     if res.is_some() {
         tracing::error!("failed to upload one worker, reason: {res:?}");
@@ -227,10 +230,14 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
         return;
     }
 
-    println!("=====> worker uploaded. visit the url provided.");
+    println!("=====> worker uploaded. visit: {}", worker_url);
 
     if let Err(e) = handle.await {
         tracing::error!(?e, "error while joining task handle");
+    }
+
+    if fs::remove_file(format!(".serverlessd/workers/{}.js", worker_id)).is_err() {
+        eprintln!("=====! failed to remove temp worker file");
     }
 }
 
