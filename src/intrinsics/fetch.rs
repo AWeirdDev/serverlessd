@@ -7,6 +7,7 @@ use reqwest::{
 use v8::{Global, Local, Object, PromiseResolver};
 
 use crate::{
+    intrinsics::response::Response,
     language::{ThrowException, throw},
     runtime::WorkerState,
 };
@@ -68,19 +69,15 @@ pub fn fetch(
             scope,
             ThrowException::type_error("fetch: At least 1 argument required, but only 0 passed"),
         );
-        let resolver = v8::PromiseResolver::new(scope).unwrap();
+        let resolver = some!(v8::PromiseResolver::new(scope));
         resolver.reject(scope, exc);
         rv.set(resolver.cast());
 
         return;
     }
 
-    // 1. get the url
-    let url = args
-        .get(0)
-        .to_string(scope)
-        .unwrap()
-        .to_rust_string_lossy(scope);
+    // get the url
+    let url = some!(args.get(0).to_string(scope)).to_rust_string_lossy(scope);
 
     let options = args.get(1);
     let has_options = options.is_object() && !options.is_null_or_undefined();
@@ -139,7 +136,33 @@ pub fn fetch(
         }
 
         // body
-        {}
+        'body: {
+            let body_k = some!(options.get(scope, some!(v8::String::new(scope, "body")).cast()));
+
+            if body_k.is_null_or_undefined() {
+                break 'body;
+            }
+
+            if body_k.is_string() {
+                let s = some!(body_k.to_string(scope)).to_rust_string_lossy(scope);
+                rq = rq.body(s);
+            } else if body_k.is_array_buffer_view() {
+                let view = body_k.cast::<v8::ArrayBufferView>();
+                let mut buf = vec![0u8; view.byte_length()];
+                view.copy_contents(&mut buf);
+                rq = rq.body(buf);
+            } else if body_k.is_array_buffer() {
+                let ab = body_k.cast::<v8::ArrayBuffer>();
+                let store = ab.get_backing_store();
+                let slice = unsafe {
+                    std::slice::from_raw_parts(
+                        some!(store.data()).as_ptr() as *const u8,
+                        store.byte_length(),
+                    )
+                };
+                rq = rq.body(slice.to_vec());
+            }
+        }
     }
 
     let resolver = some!(PromiseResolver::new(scope));
@@ -152,11 +175,46 @@ pub fn fetch(
             let result = rq.send().await;
 
             match result {
-                Ok(_resp) => {
+                Ok(resp) => {
                     state2.schedule_resolution(
                         gresolver,
                         Ok(Box::new(move |scope| {
-                            Local::new(scope, v8::null(scope).cast())
+                            let Some(jsresp) = Response::builder(scope)
+                                .type_("basic")
+                                .status(resp.status().as_u16())
+                                .url(resp.url().as_str())
+                                .build()
+                            else {
+                                return throw(scope, ThrowException::error("unknown error"));
+                            };
+
+                            // .headers — a Headers-like object { get(name), entries(), ... }
+
+                            // Store raw body bytes in an ArrayBuffer
+                            // let body_ab = bytes_to_array_buffer(scope, &resp.body);
+
+                            // .arrayBuffer() → Promise<ArrayBuffer>
+                            // let ab_clone = v8::Global::new(scope, body_ab);
+                            // let ab_fn =
+                            //     make_body_method(scope, ab_clone, BodyKind::ArrayBuffer);
+                            // set_prop(scope, obj, "arrayBuffer", ab_fn.into());
+
+                            // .text() → Promise<string>
+                            // let ab_clone2 = v8::Global::new(scope, body_ab);
+                            // let text_fn = make_body_method(scope, ab_clone2, BodyKind::Text);
+                            // set_prop(scope, obj, "text", text_fn.into());
+
+                            // .json() → Promise<any>
+                            // let ab_clone3 = v8::Global::new(scope, body_ab);
+                            // let json_fn = make_body_method(scope, ab_clone3, BodyKind::Json);
+                            // set_prop(scope, obj, "json", json_fn.into());
+
+                            // .blob() — returns a minimal object with {size, type, arrayBuffer()}
+                            // let ab_clone4 = v8::Global::new(scope, body_ab);
+                            // let blob_fn = make_body_method(scope, ab_clone4, BodyKind::Blob);
+                            // set_prop(scope, obj, "blob", blob_fn.into());
+
+                            Local::new(scope, jsresp.cast())
                         })),
                     );
                 }

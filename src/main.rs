@@ -36,6 +36,7 @@ enum Command {
     One(OneArgs),
 
     /// Run the full serverless runtime.
+    ///
     /// The amount of memory needed is determined by the
     /// `n-pods` and `n-pods-per-worker` options.
     Run(RunArgs),

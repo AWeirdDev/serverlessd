@@ -51,7 +51,6 @@ pub enum ThrowException {
 
 impl ThrowException {
     #[inline]
-    #[allow(unused)]
     pub fn error<K: Into<String>>(s: K) -> Self {
         Self::Error(s.into())
     }
@@ -63,7 +62,7 @@ impl ThrowException {
 }
 
 impl ThrowException {
-    fn into_exception<'a>(&self, scope: &'a v8::PinScope) -> v8::Local<'a, v8::Value> {
+    fn into_exception<'s>(&self, scope: &v8::PinScope<'s, '_>) -> v8::Local<'s, v8::Value> {
         macro_rules! bind_to_v8_err {
             (message: $message:expr, exc: $exc:expr) => {
                 $exc(
@@ -92,7 +91,7 @@ impl ThrowException {
 /// # Returns
 /// The created exception.
 #[inline]
-pub fn throw<'a>(scope: &'a v8::PinScope, exc: ThrowException) -> Local<'a, v8::Value> {
+pub fn throw<'s>(scope: &v8::PinScope<'s, '_>, exc: ThrowException) -> Local<'s, v8::Value> {
     let exc = exc.into_exception(scope);
     scope.throw_exception(exc);
     exc
