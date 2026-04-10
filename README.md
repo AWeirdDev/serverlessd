@@ -1,6 +1,7 @@
 <div align="center">
 
 <h1>serverlessd<br /><sup>(serverless runtime)</sup></h1>
+
 ![github build](https://img.shields.io/github/actions/workflow/status/AWeirdDev/serverlessd/ci.yml)
 
 </div>
