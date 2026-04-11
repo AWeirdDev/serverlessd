@@ -94,7 +94,7 @@ pub(super) async fn serverless_task(
 
 async fn close_serverless(mut serverless: Serverless, handles: Vec<JoinHandle<()>>) {
     tracing::info!("sending halt to all pods...");
-    serverless.halt().await;
+    serverless.kill().await;
 
     tracing::info!("joining pods...");
 

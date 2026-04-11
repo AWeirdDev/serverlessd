@@ -7,6 +7,7 @@ use crate::{
 
 pub struct Response;
 
+#[allow(unused)]
 impl Response {
     #[inline(always)]
     #[must_use]
@@ -100,6 +101,7 @@ pub struct ResponseBuilder<'s, 'i, 'k> {
     this: Local<'s, v8::Object>,
 }
 
+#[allow(unused)]
 impl<'s, 'i, 'k> ResponseBuilder<'s, 'i, 'k> {
     /// Creates a new response builder.
     #[inline]

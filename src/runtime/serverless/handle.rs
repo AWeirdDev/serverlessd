@@ -90,3 +90,9 @@ impl ServerlessHandle {
         self.tx.send(trigger).await.ok()
     }
 }
+
+impl std::fmt::Debug for ServerlessHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ServerlessHandle")
+    }
+}

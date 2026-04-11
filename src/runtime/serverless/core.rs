@@ -108,9 +108,9 @@ impl Serverless {
     }
 
     /// Stop all pods.
-    pub(super) async fn halt(&mut self) {
+    pub(super) async fn kill(&mut self) {
         for pod in self.pods.drain(..) {
-            if !pod.halt().await {
+            if !pod.kill().await {
                 tracing::error!("failed to halt");
             }
         }
@@ -118,9 +118,9 @@ impl Serverless {
 
     /// Stop a pod.
     #[allow(unused)]
-    pub(super) async fn halt_pod(&mut self, id: usize) -> bool {
+    pub(super) async fn kill_pod(&mut self, id: usize) -> bool {
         if let Some(pod) = self.pods.get_mut(id) {
-            pod.halt().await
+            pod.kill().await
         } else {
             false
         }

@@ -6,24 +6,6 @@ pub fn resolve_module_callback<'a>(
     _import_attributes: v8::Local<'a, v8::FixedArray>,
     _referrer: v8::Local<'a, v8::Module>,
 ) -> Option<v8::Local<'a, v8::Module>> {
-    // let scope = std::pin::pin!(unsafe { v8::CallbackScope::new(context) });
-    // let scope_rf = &mut scope.init();
-
-    // let specifier_str = specifier.to_rust_string_lossy(scope_rf);
-    // let name = specifier_str
-    //     .split_once("/")
-    //     .unwrap_or(("intrinsics:", ""))
-    //     .1;
-    // let Ok(code) = fs::read_to_string(format!(
-    //     "{}/intrinsics/{}.js",
-    //     env!("CARGO_MANIFEST_DIR"),
-    //     name
-    // )) else {
-    //     return None;
-    // };
-
-    // let compiled = compile_module(scope_rf, code, specifier_str);
-
     None
 }
 

@@ -13,7 +13,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
                 tracing::info!(
                     "pod checking vacancies, vacancies: {:?}, workers: {:?}",
                     pod.vacancies,
-                    pod.workers
+                    pod.workers,
                 );
                 reply.send(pod.has_vacancies()).ok();
             }

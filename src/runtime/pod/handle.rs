@@ -5,6 +5,7 @@ use crate::runtime::{
     pod::{PodTrigger, trigger::PodTx},
 };
 
+/// A handle for interacting with the `Pod` via message passing.
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PodHandle {
@@ -17,14 +18,22 @@ impl PodHandle {
         Self { tx }
     }
 
-    /// Stop the pod task.
+    /// Kills the pod.
     ///
-    /// Returns `false` if failed.
+    /// When sent, the pod management thread will do the following
+    /// for each worker within it:
+    ///
+    /// 1. Halts the existing task (if not at sleeping state)
+    /// 2. Kills the worker
+    ///
+    /// This enables graceful canceling.
+    ///
+    /// # Returns
+    /// A boolean indicating whether the operation was successful.
     #[must_use]
-    pub async fn halt(&self) -> bool {
+    pub async fn kill(&self) -> bool {
         let (token, recv) = oneshot::channel();
 
-        tracing::info!("waiting for pod to be killed...");
         if !self.tx.send(PodTrigger::Kill { token }).await.is_ok() {
             tracing::error!("failed to kill pod");
             return false;
@@ -33,6 +42,8 @@ impl PodHandle {
         recv.await.is_ok()
     }
 
+    /// Checks whether or not this pod has any vacancies to run
+    /// a task.
     pub async fn has_vacancies(&self) -> bool {
         let (reply, recv) = oneshot::channel();
         if !self.trigger(PodTrigger::CheckVacancies { reply }).await {
@@ -42,7 +53,10 @@ impl PodHandle {
         recv.await.ok().unwrap_or(false)
     }
 
-    /// Create and warm up a worker. Returns `Some(worker_id)` if successful.
+    /// Creates and warms up a worker.
+    ///
+    /// # Returns
+    /// `Some(worker_id)` if successful.
     pub async fn create_and_warmup_worker(&self) -> Option<usize> {
         let (reply, receive) = oneshot::channel::<usize>();
         if !self.trigger(PodTrigger::WarmUpWorker { reply }).await {
@@ -52,8 +66,12 @@ impl PodHandle {
         receive.await.ok()
     }
 
-    /// Assign a worker a task. Returns `true` if successful.
+    /// Assigns a worker a task.
+    ///
+    /// # Returns
+    /// A boolean indicating whether the operation was successful.
     #[must_use]
+    #[inline]
     pub async fn assign_worker_task(&self, id: usize, task: WorkerTask) -> bool {
         self.trigger(PodTrigger::ToWorker {
             id,
@@ -62,7 +80,10 @@ impl PodHandle {
         .await
     }
 
+    /// Marks a worker as "vacant," meaning it is now ready to be
+    /// assigned with new tasks.
     #[must_use]
+    #[inline]
     pub async fn mark_worker_as_vacant(&self, id: usize) -> bool {
         let success = self.trigger(PodTrigger::MarkWorkerAsVacant { id }).await;
         if success { true } else { false }

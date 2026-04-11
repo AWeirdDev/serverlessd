@@ -1,7 +1,5 @@
-use tokio::{
-    sync::mpsc,
-    task::{self, JoinSet},
-};
+use tokio::{sync::mpsc, task};
+use tokio_util::task::TaskTracker;
 
 use crate::runtime::{
     Monitor, MonitorHandle, WorkerHandle,
@@ -13,7 +11,7 @@ use crate::runtime::{
 pub struct Pod {
     pub tx: PodTx,
     pub monitor: MonitorHandle,
-    pub tasks: JoinSet<()>,
+    pub tasks: TaskTracker,
     pub(super) workers: Vec<Option<WorkerHandle>>,
     pub(super) vacancies: Vec<usize>,
 }
@@ -21,14 +19,14 @@ pub struct Pod {
 impl Pod {
     /// Spawn a dedicated thread for managing workers.
     pub fn start(n_workers: usize) -> (PodHandle, task::JoinHandle<()>) {
-        let (tx, rx) = mpsc::channel::<PodTrigger>(64);
+        let (tx, rx) = mpsc::channel::<PodTrigger>(n_workers);
         let pod_handle = PodHandle::new(tx.clone());
 
         let pod = Self {
             tx: tx,
             workers: Vec::with_capacity(n_workers),
             vacancies: Vec::with_capacity(n_workers),
-            tasks: JoinSet::new(),
+            tasks: TaskTracker::new(),
             monitor: {
                 let m = Monitor::new(pod_handle.clone());
                 m.start()
@@ -49,13 +47,14 @@ impl Pod {
         (pod_handle, join_handle)
     }
 
+    /// Checks whether or not there are any vacancies.
     #[inline(always)]
     pub fn has_vacancies(&self) -> bool {
         !self.vacancies.is_empty() || self.workers.len() < self.workers.capacity()
     }
 
     /// Get the next worker ID.
-    /// You **must** check if this pod has a vacancy.
+    /// You **must** check if this pod has a vacancy first.
     #[inline(always)]
     pub fn get_next_worker_id(&mut self) -> usize {
         self.vacancies.pop().unwrap_or_else(|| {
@@ -65,12 +64,21 @@ impl Pod {
         })
     }
 
+    /// Puts a worker in the pod.
+    ///
+    /// # Safety
+    /// The worker of ID `id` must exist.
+    #[inline(always)]
     pub fn put_worker(&mut self, id: usize, worker: WorkerHandle) {
         unsafe {
             self.workers.get_mut(id).unwrap_unchecked().replace(worker);
         }
     }
 
+    /// Removes a worker from the pod.
+    ///
+    /// # Returns
+    /// A boolean indicating whether the worker has been removed successfully.
     pub fn remove_worker(&mut self, id: usize) -> bool {
         if let Some(worker) = self.workers.get_mut(id) {
             let res = worker.take();
@@ -85,6 +93,7 @@ impl Pod {
         }
     }
 
+    /// Gets a worker from the pod by ID, returning the worker handle.
     #[inline]
     pub(super) fn get_worker(&self, id: usize) -> Option<&WorkerHandle> {
         if let Some(worker) = self.workers.get(id) {
@@ -94,7 +103,7 @@ impl Pod {
         }
     }
 
-    /// Create & start a new worker instance, then return the handle.
+    /// Creates and starts a new worker instance, returning the ID of the worker.
     #[inline]
     #[must_use]
     pub(super) fn create_and_warmup_worker(&mut self) -> usize {

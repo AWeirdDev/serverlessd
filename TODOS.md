@@ -6,3 +6,4 @@
 - [x] time advancement
 - [ ] worker custom environment variables
 - [ ] better error codes at http level and exception handling
+- [ ] URGENT: WORKER GETS REMOVED COMPLETELY AND DOESN'T COUNT AS "SLEEPING," SHOULD ADD STATES FOR WORKERS INSTEAD.
