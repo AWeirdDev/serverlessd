@@ -26,11 +26,16 @@ pub enum PodTrigger {
         reply: oneshot::Sender<usize>,
     },
 
+    /// Mark a worker as sleeping.
+    MarkWorkerAsSleeping {
+        id: usize,
+    },
+
     /// Remove a worker.
     ///
     /// At this point, the worker will be removed from the
     /// array, and can no longer be accessed.
-    MarkWorkerAsVacant {
+    RemoveWorker {
         id: usize,
     },
 }

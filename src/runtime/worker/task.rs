@@ -110,7 +110,7 @@ pub(super) async fn create_cancel_safe_task(
 
                 // at this point, the work is done
                 pod_tx
-                    .send(PodTrigger::MarkWorkerAsVacant { id })
+                    .send(PodTrigger::MarkWorkerAsSleeping { id })
                     .await
                     .ok();
 

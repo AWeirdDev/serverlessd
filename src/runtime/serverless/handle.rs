@@ -5,7 +5,7 @@ use crate::runtime::{
     PodTrigger, WorkerTrigger,
     serverless::{
         code_store::CodeStoreError,
-        trigger::{ServerlessTrigger, ServerlessTx},
+        trigger::{CreateWorkerError, ServerlessTrigger, ServerlessTx},
     },
 };
 
@@ -22,17 +22,17 @@ impl ServerlessHandle {
 
     /// Notifies the serverless runtime to create a worker.
     #[must_use]
-    pub async fn create_worker(&self, name: String) -> Option<(usize, usize)> {
+    pub async fn create_worker(&self, name: String) -> Result<(usize, usize), CreateWorkerError> {
         tracing::info!("creating worker for {}", name);
 
         let (reply, receive) = oneshot::channel();
         self.tx
             .send(ServerlessTrigger::CreateWorker { name, reply })
             .await
-            .ok()?;
+            .map_err(|_| CreateWorkerError::CannotCreateTask)?;
 
         let Ok(result) = receive.await else {
-            return None;
+            return Err(CreateWorkerError::CannotCreateTask);
         };
 
         result

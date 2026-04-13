@@ -3,11 +3,20 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::runtime::{PodTrigger, serverless::code_store::CodeStoreError};
 
+#[derive(Debug, thiserror::Error)]
+pub enum CreateWorkerError {
+    #[error("unknown worker {0:?}")]
+    UnknownWorker(String),
+
+    #[error("cannot create task")]
+    CannotCreateTask,
+}
+
 #[derive(Debug)]
 pub enum ServerlessTrigger {
     CreateWorker {
         name: String,
-        reply: oneshot::Sender<Option<(usize, usize)>>,
+        reply: oneshot::Sender<Result<(usize, usize), CreateWorkerError>>,
     },
 
     UploadWorkerCode {

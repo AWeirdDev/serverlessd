@@ -84,8 +84,8 @@ impl PodHandle {
     /// assigned with new tasks.
     #[must_use]
     #[inline]
-    pub async fn mark_worker_as_vacant(&self, id: usize) -> bool {
-        let success = self.trigger(PodTrigger::MarkWorkerAsVacant { id }).await;
+    pub async fn remove_worker(&self, id: usize) -> bool {
+        let success = self.trigger(PodTrigger::RemoveWorker { id }).await;
         if success { true } else { false }
     }
 

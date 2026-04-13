@@ -8,7 +8,7 @@ use crate::runtime::{
         app::start_server,
         core::Serverless,
         handle::ServerlessHandle,
-        trigger::{ServerlessRx, ServerlessTrigger},
+        trigger::{CreateWorkerError, ServerlessRx, ServerlessTrigger},
     },
 };
 
@@ -62,12 +62,20 @@ pub(super) async fn serverless_task(
                                 let source = match serverless.code_store.get_worker_code(&name).await {
                                     Some(t) => t,
                                     None => {
-                                        reply.send(None).ok();
+                                        reply.send(Err(CreateWorkerError::UnknownWorker(name))).ok();
                                         continue;
                                     }
                                 };
-                                let result = serverless.create_worker_task(WorkerTask { source, platform: serverless.get_platform() }).await;
-                                reply.send(result).ok();
+                                match serverless.create_worker_task(WorkerTask { source, platform: serverless.get_platform() }).await {
+                                    Some(result) => {
+                                        reply.send(Ok(result)).ok();
+                                    }
+
+                                    None => {
+                                        reply.send(Err(CreateWorkerError::CannotCreateTask)).ok();
+                                    }
+                                };
+
                             }
                             ServerlessTrigger::ToPod { id, trigger } => {
                                 if let Some(pod) = serverless.get_pod(id) {

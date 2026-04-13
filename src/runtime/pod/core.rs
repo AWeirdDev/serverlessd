@@ -69,9 +69,9 @@ impl Pod {
     /// # Safety
     /// The worker of ID `id` must exist.
     #[inline(always)]
-    pub fn put_worker(&mut self, id: usize, worker: WorkerHandle) {
+    pub fn put_worker(&mut self, id: usize, handle: WorkerHandle) {
         unsafe {
-            self.workers.get_mut(id).unwrap_unchecked().replace(worker);
+            self.workers.get_mut(id).unwrap_unchecked().replace(handle);
         }
     }
 
@@ -93,7 +93,17 @@ impl Pod {
         }
     }
 
-    /// Gets a worker from the pod by ID, returning the worker handle.
+    #[inline]
+    pub fn mark_worker_as_sleeping(&mut self, id: usize) -> bool {
+        if self.workers.get_mut(id).is_some() {
+            self.vacancies.push(id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Gets a worker from the pod by ID, returning the worker handle with state attached.
     #[inline]
     pub(super) fn get_worker(&self, id: usize) -> Option<&WorkerHandle> {
         if let Some(worker) = self.workers.get(id) {
@@ -107,10 +117,10 @@ impl Pod {
     #[inline]
     #[must_use]
     pub(super) fn create_and_warmup_worker(&mut self) -> usize {
-        let worker = WorkerHandle::start(self);
+        let handle = WorkerHandle::start(self);
 
         let id = self.get_next_worker_id();
-        self.put_worker(id, worker);
+        self.put_worker(id, handle);
 
         id
     }

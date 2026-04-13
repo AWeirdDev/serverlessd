@@ -1,5 +1,7 @@
 var one = 0;
 
 export default {
-  async fetch() {},
+  async fetch() {
+    return "hello, world!";
+  },
 };

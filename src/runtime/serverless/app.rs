@@ -1,10 +1,20 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use salvo::{affix_state, catcher::Catcher, prelude::*};
+use salvo::{
+    affix_state,
+    catcher::Catcher,
+    http::{HeaderName, HeaderValue},
+    prelude::*,
+};
 use serde_json::json;
 use tokio::io;
 
-use crate::runtime::serverless::{app_security::AuthMiddleware, handle::ServerlessHandle};
+use crate::runtime::serverless::{
+    app_security::AuthMiddleware, handle::ServerlessHandle, trigger::CreateWorkerError,
+};
+
+const NOT_FOUND_TEMPLATE: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/static/index.html"));
 
 struct AppState {
     serverless: ServerlessHandle,
@@ -54,9 +64,22 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     let name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
 
-    let Some((pod, wrk)) = state.serverless.create_worker(name).await else {
-        res.render(errored("failed to create worker"));
-        return;
+    let (pod, wrk) = match state.serverless.create_worker(name).await {
+        Ok(t) => t,
+        Err(err) => {
+            if let CreateWorkerError::UnknownWorker(_) = err {
+                res.status_code(StatusCode::NOT_FOUND);
+                res.add_header(
+                    HeaderName::from_static("content-type"),
+                    HeaderValue::from_static("text/html"),
+                    true,
+                )
+                .ok();
+                res.render(NOT_FOUND_TEMPLATE);
+            }
+
+            return;
+        }
     };
 
     let Some(result) = state.serverless.send_http_to_worker(pod, wrk).await else {
