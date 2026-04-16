@@ -1,0 +1,14 @@
+[package]
+name = "svld-rt-kv"
+version = "0.1.0"
+edition = "2024"
+description = "Serverlessd runtime KV namespace — storage backend for the KV binding"
+
+[dependencies]
+async-trait = "0.1.89"
+serde       = { version = "1.0", features = ["derive"] }
+serde_json  = "1.0"
+tokio       = { version = "1", features = ["sync", "rt"] }
+thiserror   = "2"
+rusqlite    = { version = "0.31", features = ["bundled"] }
+base64      = "0.22"
