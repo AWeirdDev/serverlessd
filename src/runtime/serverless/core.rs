@@ -8,7 +8,7 @@ use tokio::{
 use v8::{Platform, SharedRef};
 
 use crate::runtime::{
-    PodHandle, WorkerTask,
+    PodHandle,
     serverless::{
         code_store::{CodeStore, CodeStoreError},
         handle::ServerlessHandle,
@@ -91,12 +91,19 @@ impl Serverless {
         self.platform.clone()
     }
 
+    /// Find vacancy.
+    ///
+    /// # Returns
+    /// `Some(((pod_handle, monitor_handke), (pod_id, pod_worker_id)))` if found.
     #[inline]
-    async fn find_vacancy(&self) -> Option<usize> {
-        for (idx, pod) in self.pods.iter().enumerate() {
+    pub(super) async fn find_vacancy_and_warmup(&self) -> Option<(PodHandle, usize, usize)> {
+        for (pod_id, pod) in self.pods.iter().enumerate() {
             if pod.has_vacancies().await {
-                tracing::info!("found pod {} has a vacancy!", idx);
-                return Some(idx);
+                tracing::info!("found pod {} has a vacancy!", pod_id);
+
+                let pod_worker_id = pod.create_and_warmup_worker().await?;
+
+                return Some((pod.clone(), pod_id, pod_worker_id));
             }
         }
         None
@@ -105,6 +112,12 @@ impl Serverless {
     #[inline(always)]
     pub(super) fn get_pod(&self, id: usize) -> Option<&PodHandle> {
         self.pods.get(id)
+    }
+
+    /// Push a pod handle to the serverless runtime.
+    #[inline(always)]
+    pub(super) fn push_pod(&mut self, pod_handle: PodHandle) {
+        self.pods.push(pod_handle);
     }
 
     /// Stop all pods.
@@ -123,32 +136,6 @@ impl Serverless {
             pod.kill().await
         } else {
             false
-        }
-    }
-
-    /// Finds vacancies from pods, then create a worker
-    /// within the pod, eventually returning `Some()` tuple containing:
-    ///
-    /// `(pod_id: usize, pod_worker_id: usize)`
-    ///
-    /// Under one of these conditions, `None` is returned:
-    /// - No vacancies available
-    /// - Failed to trigger pod
-    /// - Failed to receive worker id under the designated pod
-    #[must_use]
-    pub(super) async fn create_worker_task(&self, task: WorkerTask) -> Option<(usize, usize)> {
-        tracing::info!("finding vacancy");
-        let pod_id = self.find_vacancy().await?;
-        tracing::info!("found vacancy! {pod_id}");
-
-        let pod = unsafe { self.pods.get(pod_id).unwrap_unchecked() };
-        let pod_worker_id = pod.create_and_warmup_worker().await?;
-
-        let success = pod.assign_worker_task(pod_worker_id, task).await;
-        if success {
-            Some((pod_id, pod_worker_id))
-        } else {
-            None
         }
     }
 

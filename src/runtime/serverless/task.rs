@@ -27,7 +27,7 @@ pub(super) async fn serverless_task(
     let mut handles = Vec::with_capacity(serverless.n_threads);
     for _ in 0..serverless.n_threads {
         let (pod, handle) = Pod::start(serverless.n_workers);
-        serverless.pods.push(pod);
+        serverless.push_pod(pod);
         handles.push(handle);
     }
 
@@ -66,15 +66,28 @@ pub(super) async fn serverless_task(
                                         continue;
                                     }
                                 };
-                                match serverless.create_worker_task(WorkerTask { source, platform: serverless.get_platform() }).await {
-                                    Some(result) => {
-                                        reply.send(Ok(result)).ok();
-                                    }
 
-                                    None => {
-                                        reply.send(Err(CreateWorkerError::CannotCreateTask)).ok();
-                                    }
+                                tracing::info!("creating worker task");
+                                let Some((pod_handle, pod_id, pod_worker_id)) = serverless.find_vacancy_and_warmup().await else {
+                                    reply.send(Err(CreateWorkerError::CannotCreateTask)).ok();
+                                    continue;
                                 };
+
+                                let success =
+                                    pod_handle.assign_worker_task(
+                                        pod_worker_id,
+                                        WorkerTask {
+                                            source,
+                                            platform: serverless.get_platform(),
+                                        }
+                                    )
+                                    .await;
+
+                                if success {
+                                    reply.send(Ok((pod_id, pod_worker_id))).ok();
+                                }
+
+                                tracing::info!("done with creating worker task");
 
                             }
                             ServerlessTrigger::ToPod { id, trigger } => {

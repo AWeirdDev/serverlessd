@@ -108,21 +108,15 @@ pub(super) async fn create_cancel_safe_task(
                     &mut state_handle,
                 )
                 .await;
-                tracing::info!("task finished, marking worker as vacant");
+                tracing::info!("task stopped/finished, marking worker as sleeping");
 
-                // at this point, the work is done
-                pod_tx
-                    .send(PodTrigger::MarkWorkerAsSleeping { id })
-                    .await
-                    .ok();
+                if let Some(state) = state_handle.take() {
+                    tracing::info!("closing state");
+                    close_state(state);
+                }
 
                 match result {
                     Ok(should_restart) => {
-                        if let Some(state) = state_handle.take() {
-                            tracing::info!("closing state");
-                            close_state(state).await;
-                        }
-
                         if !should_restart {
                             drop_isolate(isolate_ptr);
                             break;
@@ -132,6 +126,12 @@ pub(super) async fn create_cancel_safe_task(
                         tracing::error!("got error on closed handler, {:?}", err);
                     }
                 }
+
+                // at this point, the work is done
+                pod_tx
+                    .send(PodTrigger::MarkWorkerAsSleeping { id })
+                    .await
+                    .ok();
             }
 
             WorkerTrigger::Kill { token } => {
@@ -307,7 +307,6 @@ async fn create_task(
             WorkerTrigger::Http { reply } => {
                 tracing::info!("worker received http");
                 if let Some(fetch) = entrypoint_fetch {
-                    // replier still exists
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
@@ -506,12 +505,12 @@ async fn init_worker_for_task(
 
 /// Gracefully closes the worker state, releasing memory.
 #[inline]
-async fn close_state(state: Arc<WorkerState>) {
+fn close_state(state: Arc<WorkerState>) {
     let isolate = unsafe { &mut *state.isolate.as_ptr() };
     drop(state);
 
     let state2 = WorkerState::open_from_isolate(isolate);
-    state2.wait_close().await;
+    state2.close();
 
     // at this point, state & state2 gets dropped
     // memory gets freed (hopefully, PLEASE)

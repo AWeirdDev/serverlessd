@@ -20,7 +20,6 @@ impl WorkerHandle {
     #[inline]
     pub fn start(pod: &Pod) -> Self {
         let (tx, rx) = mpsc::channel::<WorkerTrigger>(1);
-
         let monitor_handle = pod.monitor.clone();
 
         pod.tasks

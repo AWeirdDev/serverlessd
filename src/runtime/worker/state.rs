@@ -135,9 +135,8 @@ impl WorkerState {
 
     /// Wait until the runtime has closed.
     #[inline]
-    pub async fn wait_close(self: Arc<Self>) {
+    pub fn close(self: Arc<Self>) {
         self.tasks.close();
-        self.tasks.wait().await;
     }
 
     /// Ticks the [`Monitoring`].

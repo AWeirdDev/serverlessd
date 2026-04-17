@@ -69,9 +69,12 @@ impl WorkerStateExtension for ReplierWorkerStateExtension {
         Self: Sized + 'static,
     {
         let slf = unsafe { slf.downcast::<Self>().unwrap_unchecked() };
+
+        println!("DROP: ReplierWorkerStateExtension");
         let mut maybe_replier = slf.replier.get();
 
         if let Some(replier) = maybe_replier.as_mut() {
+            println!("replier exists!");
             if unsafe { &*replier.as_ptr() }.is_some() {
                 let item = unsafe { &mut *replier.as_ptr() };
                 if let Some(item) = item.take() {

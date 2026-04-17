@@ -95,6 +95,7 @@ impl MonitorHandle {
         Self { tx }
     }
 
+    /// Start monitoring a worker.
     #[must_use]
     pub async fn start_monitoring(
         &self,
@@ -214,6 +215,8 @@ impl Monitoring {
 }
 
 async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id: usize) {
+    tracing::info!("monitoring worker {}", worker_id);
+
     let mut elapsed = Duration::default();
 
     let walltime_tick = tokio::time::sleep(Duration::from_secs(10));
@@ -251,13 +254,14 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
         };
     }
 
-    // first we halt the current task
-    mw.worker_tx.send(WorkerTrigger::HaltTask).await.ok();
-
-    tracing::info!("terminating");
+    // FIRST terminate
+    tracing::info!("terminating v8 execution");
     if !mw.isolate.terminate_execution() {
         tracing::error!("failed to terminate isolate when time's up (isolate already destroyed)");
     }
+
+    // first we halt the current task
+    mw.worker_tx.try_send(WorkerTrigger::HaltTask).ok();
 
     // and then kill the whole isolate
     let (token, recv) = oneshot::channel();
