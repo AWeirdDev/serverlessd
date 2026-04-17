@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use svld_state_extensions::Reply;
 use tokio::sync::oneshot;
 
 use crate::runtime::{
@@ -58,7 +59,7 @@ impl ServerlessHandle {
 
     #[inline]
     #[must_use]
-    pub async fn send_http_to_worker(&self, pod: usize, wrk: usize) -> Option<String> {
+    pub async fn send_http_to_worker(&self, pod: usize, wrk: usize) -> Option<Reply> {
         let (reply, recv) = oneshot::channel();
         self.trigger(ServerlessTrigger::ToPod {
             id: pod,

@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use askama::Template;
 use salvo::{
     affix_state,
     catcher::Catcher,
@@ -13,8 +14,15 @@ use crate::runtime::serverless::{
     app_security::AuthMiddleware, handle::ServerlessHandle, trigger::CreateWorkerError,
 };
 
-const NOT_FOUND_TEMPLATE: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/static/index.html"));
+#[derive(Template)]
+#[template(path = "404.html")]
+struct NotFoundTemplate;
+
+#[derive(Template)]
+#[template(path = "error.html")]
+struct ErrorTemplate<'a> {
+    reasoning: &'a str,
+}
 
 struct AppState {
     serverless: ServerlessHandle,
@@ -75,7 +83,7 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
                     true,
                 )
                 .ok();
-                res.render(NOT_FOUND_TEMPLATE);
+                res.render(NotFoundTemplate.to_string());
             }
 
             return;
@@ -83,10 +91,25 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     };
 
     let Some(result) = state.serverless.send_http_to_worker(pod, wrk).await else {
-        res.render(errored("failed to execute worker"));
+        res.render(errored(
+            "failed to execute worker; an unknown error occurred.",
+        ));
         return;
     };
-    res.render(result);
+
+    match result {
+        Ok(t) => {
+            res.render(t);
+        }
+        Err(err) => {
+            res.render(
+                ErrorTemplate {
+                    reasoning: &err.to_string(),
+                }
+                .to_string(),
+            );
+        }
+    }
 }
 
 #[handler]

@@ -1,10 +1,9 @@
 use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 
-use tokio::sync::oneshot;
 use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
 
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
-use svld_state_extensions::ReplierWorkerStateExtension;
+use svld_state_extensions::{MaybeReplier, ReplierWorkerStateExtension};
 
 use crate::{
     compile, intrinsics,
@@ -249,7 +248,15 @@ async fn create_task(
     };
 
     tracing::info!("worker now started, waiting for events");
-    while let Some(event) = rx.recv().await {
+
+    loop {
+        let maybe_event_if_trigger = tokio::select! {
+            data = rx.recv() => Some(data),
+            _ = state.wait_event_loop_tick() => None
+        };
+        tracing::info!("tick event!");
+
+        // event loop
         {
             let mut resolutions = state.pending_resolutions.borrow_mut();
             while let Some((gresolver, result)) = resolutions.pop_front() {
@@ -267,8 +274,15 @@ async fn create_task(
                     }
                 }
             }
+            try_catch.perform_microtask_checkpoint();
         }
-        try_catch.perform_microtask_checkpoint();
+
+        let Some(maybe_event) = maybe_event_if_trigger else {
+            continue;
+        };
+        let Some(event) = maybe_event else {
+            return Ok(false);
+        };
 
         match event {
             // ===== bad events =====
@@ -311,14 +325,12 @@ async fn create_task(
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
-                    let replier_shell = unsafe {
-                        state
-                            .get_extension::<ReplierWorkerStateExtension>()
-                            .unwrap_unchecked()
-                    };
+                    let replier_shell =
+                        unsafe { state.get_extension_unchecked::<ReplierWorkerStateExtension>() };
                     replier_shell.set_replier(replier_ptr);
 
                     {
+                        // RESOLVE
                         let resolve = Function::builder(
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,
@@ -326,13 +338,17 @@ async fn create_task(
                                 let state = WorkerState::get_from_isolate(scope);
                                 state.tick_monitoring(); // the cpu task is done. nice!
 
+                                // this is a mutable reference, NOT OWNED!!!!!!
                                 let replier = unsafe {
                                     &mut *(args.data().cast::<External>().value()
-                                        as *mut Option<oneshot::Sender<String>>)
+                                        as *mut MaybeReplier)
                                 };
 
                                 if let Some(replier) = replier.take() {
-                                    replier.send(args.get(0).to_rust_string_lossy(scope)).ok();
+                                    tracing::info!("replied to http");
+                                    replier
+                                        .send(Ok(args.get(0).to_rust_string_lossy(scope)))
+                                        .ok();
                                 }
                             },
                         )
@@ -348,6 +364,7 @@ async fn create_task(
                     }
 
                     {
+                        // REJECT
                         let reject = Function::builder(
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,
@@ -357,11 +374,13 @@ async fn create_task(
 
                                 let replier = unsafe {
                                     &mut *(args.data().cast::<External>().value()
-                                        as *mut Option<oneshot::Sender<String>>)
+                                        as *mut MaybeReplier)
                                 };
 
                                 if let Some(replier) = replier.take() {
-                                    replier.send(args.get(0).to_rust_string_lossy(scope)).ok();
+                                    replier
+                                        .send(Ok(args.get(0).to_rust_string_lossy(scope)))
+                                        .ok();
                                 }
                             },
                         )
@@ -381,6 +400,8 @@ async fn create_task(
                 return Ok(true);
             }
         }
+
+        // kkkk
     }
 
     Ok(false)

@@ -181,7 +181,7 @@ pub fn fetch(
 
             match result {
                 Ok(resp) => {
-                    state2.schedule_resolution(
+                    state2.schedule_resolution_and_tick(
                         gresolver,
                         Ok(Box::new(move |scope| {
                             let Some(jsresp) = Response::builder(scope)
@@ -226,7 +226,10 @@ pub fn fetch(
 
                 Err(err) => {
                     let details = err.to_string();
-                    state2.schedule_resolution(gresolver, Err(ThrowException::Error(details)));
+                    state2.schedule_resolution_and_tick(
+                        gresolver,
+                        Err(ThrowException::Error(details)),
+                    );
                 }
             }
         })

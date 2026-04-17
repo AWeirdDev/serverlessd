@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::VecDeque, ffi::c_void, ptr::NonNull, sync::Arc};
 
+use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
@@ -19,8 +20,10 @@ type PendingResolution = (Global<PromiseResolver>, ResolutionResult);
 ///
 /// Internally, the state data should be stored in the isolate.
 pub struct WorkerState {
+    // abstractions regarding the fuck ass event loop
     pub tasks: TaskTracker,
     pub pending_resolutions: RefCell<VecDeque<PendingResolution>>,
+    pub event_loop_tick: Notify,
 
     pub isolate: NonNull<OwnedIsolate>,
     pub platform: SharedRef<Platform>,
@@ -68,6 +71,7 @@ impl WorkerState {
         let slf = Arc::new(Self {
             tasks: TaskTracker::new(),
             pending_resolutions: RefCell::new(VecDeque::new()),
+            event_loop_tick: Notify::new(),
 
             isolate,
             platform,
@@ -76,8 +80,8 @@ impl WorkerState {
                 .await?,
             extensions: {
                 WorkerStateExtensions::new::<2>() // IMPORTANT: put the exact amount here!
-                    .with_extension(HttpClientWorkerExtension::new())
                     .with_extension(ReplierWorkerStateExtension::new())
+                    .with_extension(HttpClientWorkerExtension::new())
             },
         });
 
@@ -137,6 +141,7 @@ impl WorkerState {
     }
 
     /// Ticks the [`Monitoring`].
+    #[inline(always)]
     pub fn tick_monitoring(&self) {
         self.monitoring.tick();
     }
@@ -146,16 +151,44 @@ impl WorkerState {
         self.monitoring.monitored_future(f)
     }
 
-    /// Schedule promise resolution.
+    /// Schedules promise resolution and tick with [`WorkerState::tick_event_loop()`].
+    ///
+    /// # Parameters
+    /// - `resolver`: The `PromiseResolver` encapsulated in `Global<T>`.
+    /// - `result`: The result of the resolution.
     #[inline]
-    pub fn schedule_resolution(&self, resolver: Global<PromiseResolver>, result: ResolutionResult) {
+    pub fn schedule_resolution_and_tick(
+        &self,
+        resolver: Global<PromiseResolver>,
+        result: ResolutionResult,
+    ) {
         self.pending_resolutions
             .borrow_mut()
             .push_back((resolver, result));
+        self.tick_event_loop();
     }
 
+    /// Ticks the Rust & v8 event loop, allowing scheduled promises to be resolved.
+    #[inline(always)]
+    pub fn tick_event_loop(&self) {
+        self.event_loop_tick.notify_one();
+    }
+
+    /// Waits for an event loop tick.
+    ///
+    /// *(event loop)*
+    pub async fn wait_event_loop_tick(&self) {
+        self.event_loop_tick.notified().await
+    }
+
+    /// Get extension data of type `T`.
     #[inline(always)]
     pub fn get_extension<T: Sized + 'static>(&self) -> Option<&T> {
         self.extensions.get_extension()
+    }
+
+    #[inline(always)]
+    pub unsafe fn get_extension_unchecked<T: Sized + 'static>(&self) -> &T {
+        unsafe { self.get_extension::<T>().unwrap_unchecked() }
     }
 }

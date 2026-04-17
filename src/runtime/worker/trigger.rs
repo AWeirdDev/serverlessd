@@ -1,3 +1,4 @@
+use svld_state_extensions::Replier;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::runtime::WorkerTask;
@@ -15,7 +16,7 @@ pub enum WorkerTrigger {
     HaltTask,
 
     Http {
-        reply: oneshot::Sender<String>,
+        reply: Replier,
     },
 
     /// Request an isolate refresh for later use.
