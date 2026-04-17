@@ -1,0 +1,8 @@
+[package]
+name = "svld-language"
+description = "Some helpers for interacting with the JavaScript language."
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+v8 = "147.1.0"
