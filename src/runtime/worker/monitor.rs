@@ -251,13 +251,13 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
         };
     }
 
+    // first we halt the current task
+    mw.worker_tx.send(WorkerTrigger::HaltTask).await.ok();
+
     tracing::info!("terminating");
     if !mw.isolate.terminate_execution() {
         tracing::error!("failed to terminate isolate when time's up (isolate already destroyed)");
     }
-
-    // first we halt the current task
-    mw.worker_tx.send(WorkerTrigger::HaltTask).await.ok();
 
     // and then kill the whole isolate
     let (token, recv) = oneshot::channel();

@@ -118,14 +118,14 @@ pub(super) async fn create_cancel_safe_task(
 
                 match result {
                     Ok(should_restart) => {
+                        if let Some(state) = state_handle.take() {
+                            tracing::info!("closing state");
+                            close_state(state).await;
+                        }
+
                         if !should_restart {
                             drop_isolate(isolate_ptr);
                             break;
-                        }
-
-                        if let Some(state) = state_handle {
-                            tracing::info!("closing state");
-                            close_state(state).await;
                         }
                     }
                     Err(err) => {
@@ -307,6 +307,14 @@ async fn create_task(
             WorkerTrigger::Http { reply } => {
                 tracing::info!("worker received http");
                 if let Some(fetch) = entrypoint_fetch {
+                    // replier still exists
+                    let replier_handle = Box::new(Some(reply));
+
+                    let replier_ptr = Box::into_raw(replier_handle);
+                    let replier_shell =
+                        unsafe { state.get_extension_unchecked::<ReplierWorkerStateExtension>() };
+                    replier_shell.set_replier(replier_ptr);
+
                     state.tick_monitoring();
 
                     let Some(result) = fetch.call(try_catch, v8::undefined(try_catch).cast(), &[])
@@ -320,14 +328,6 @@ async fn create_task(
                         continue;
                     }
                     let promise = result.cast::<v8::Promise>();
-
-                    // replier still exists
-                    let replier_handle = Box::new(Some(reply));
-
-                    let replier_ptr = Box::into_raw(replier_handle);
-                    let replier_shell =
-                        unsafe { state.get_extension_unchecked::<ReplierWorkerStateExtension>() };
-                    replier_shell.set_replier(replier_ptr);
 
                     {
                         // RESOLVE
@@ -508,6 +508,8 @@ async fn init_worker_for_task(
 #[inline]
 async fn close_state(state: Arc<WorkerState>) {
     let isolate = unsafe { &mut *state.isolate.as_ptr() };
+    drop(state);
+
     let state2 = WorkerState::open_from_isolate(isolate);
     state2.wait_close().await;
 

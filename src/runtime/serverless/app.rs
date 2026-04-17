@@ -102,6 +102,7 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
             res.render(t);
         }
         Err(err) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
             res.render(
                 ErrorTemplate {
                     reasoning: &err.to_string(),
