@@ -26,6 +26,7 @@ dotenvy = "0.15.7"
 async-trait = "0.1.89"
 rand = "0.10.0"
 smallvec = "1.15.1"
+askama = { version = "0.15.6", features = ["alloc", "derive"] }
 
 # custom deps
 svld-language = { path = "./crates/svld-language" }
