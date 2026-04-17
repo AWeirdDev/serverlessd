@@ -6,4 +6,4 @@ mod replier;
 
 pub use client::HttpClientWorkerExtension;
 pub use core::{WorkerStateExtension, WorkerStateExtensions};
-pub use replier::ReplierWorkerStateExtension;
+pub use replier::{MaybeReplier, Replier, ReplierWorkerStateExtension, Reply};

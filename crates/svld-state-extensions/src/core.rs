@@ -5,6 +5,11 @@ use typeid::ConstTypeId;
 type ExtensionMeta = (ConstTypeId, Box<dyn Any>, fn(Box<dyn Any>) -> ());
 
 /// A container for extensions, ensuring memory safety with `drop()`.
+///
+/// Intrinsic extensions, such as the "replier," must be added.
+///
+/// # Time complexity
+/// Searching is `O(N)`, but it's fine because the number of extensions should be small.
 #[repr(transparent)]
 pub struct WorkerStateExtensions {
     extensions: Vec<ExtensionMeta>,

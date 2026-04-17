@@ -1,13 +1,29 @@
-use std::{cell::RefCell, ptr::NonNull};
+use std::{cell::OnceCell, ptr::NonNull};
 
 use tokio::sync::oneshot;
 
 use crate::WorkerStateExtension;
 
-// TODO: change String to something more meaningful and versatile,
-// like a Result.
-type MaybeReplier = NonNull<Option<oneshot::Sender<String>>>;
+#[derive(Debug, thiserror::Error)]
+pub enum ReplyError {
+    #[error("the worker timed out.")]
+    TimedOut,
+}
 
+/// The reply (type) to an HTTP event.
+pub type Reply = Result<String, ReplyError>;
+
+/// The replier to an HTTP event.
+pub type Replier = oneshot::Sender<Reply>;
+
+/// Some replier or `None`, depending on whether it's consumed.
+pub type MaybeReplier = Option<Replier>;
+type MaybeReplierNonNull = NonNull<MaybeReplier>;
+type MaybeReplierPtr = *mut MaybeReplier;
+
+/// # Intrinsic Extension "Replier"
+/// It **must** be added to each worker state at all times.
+///
 /// Safely wrapped replier for replying to HTTP requests from worker requests.
 ///
 /// For example, when a request comes in, we need to reply.
@@ -24,7 +40,7 @@ type MaybeReplier = NonNull<Option<oneshot::Sender<String>>>;
 /// This is `!Sync`.
 #[repr(transparent)]
 pub struct ReplierWorkerStateExtension {
-    pub replier: RefCell<Option<MaybeReplier>>,
+    pub replier: OnceCell<MaybeReplierNonNull>,
 }
 
 impl ReplierWorkerStateExtension {
@@ -32,16 +48,18 @@ impl ReplierWorkerStateExtension {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            replier: RefCell::new(None),
+            replier: OnceCell::new(),
         }
     }
 
     /// Sets the replier.
+    ///
+    /// This operation may only be taken once.
     #[inline]
-    pub fn set_replier(&self, replier_ptr: *mut Option<oneshot::Sender<String>>) {
-        let mut shell = self.replier.borrow_mut();
-        let ptr = unsafe { NonNull::new_unchecked(replier_ptr) };
-        shell.replace(ptr);
+    pub fn set_replier(&self, replier_ptr: MaybeReplierPtr) {
+        self.replier
+            .set(unsafe { NonNull::new_unchecked(replier_ptr) })
+            .ok();
     }
 }
 
@@ -51,14 +69,14 @@ impl WorkerStateExtension for ReplierWorkerStateExtension {
         Self: Sized + 'static,
     {
         let slf = unsafe { slf.downcast::<Self>().unwrap_unchecked() };
-        let mut maybe_replier = slf.replier.borrow_mut();
+        let mut maybe_replier = slf.replier.get();
 
         if let Some(replier) = maybe_replier.as_mut() {
             if unsafe { &*replier.as_ptr() }.is_some() {
                 let item = unsafe { &mut *replier.as_ptr() };
                 if let Some(item) = item.take() {
                     // if there's nothing, we send blank data
-                    item.send(String::new()).ok();
+                    item.send(Err(ReplyError::TimedOut)).ok();
                 }
             }
         }
