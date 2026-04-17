@@ -11,10 +11,9 @@ use tokio::sync::oneshot;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
-use crate::{
-    language::ThrowException,
-    runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx},
-};
+use svld_language::ThrowException;
+
+use crate::runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx};
 
 type MaybeReplier = NonNull<Option<oneshot::Sender<String>>>;
 

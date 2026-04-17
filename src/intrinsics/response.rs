@@ -1,9 +1,7 @@
+use svld_language::{ThrowException, throw};
 use v8::{Function, Local};
 
-use crate::{
-    language::{ThrowException, throw},
-    try_catch,
-};
+use crate::try_catch;
 
 pub struct Response;
 

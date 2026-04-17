@@ -3,9 +3,10 @@ use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 use tokio::sync::oneshot;
 use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
 
+use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
+
 use crate::{
     compile, intrinsics,
-    language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw},
     runtime::{
         PodTrigger, PodTx, WorkerState,
         worker::{

@@ -4,3 +4,4 @@
 examples
 .serverlessd/
 .env
+.claude/

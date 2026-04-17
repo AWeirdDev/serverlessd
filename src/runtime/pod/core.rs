@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use tokio::{sync::mpsc, task};
 use tokio_util::task::TaskTracker;
 
@@ -13,7 +15,7 @@ pub struct Pod {
     pub monitor: MonitorHandle,
     pub tasks: TaskTracker,
     pub(super) workers: Vec<Option<WorkerHandle>>,
-    pub(super) vacancies: Vec<usize>,
+    pub(super) vacancies: HashSet<usize>,
 }
 
 impl Pod {
@@ -25,7 +27,7 @@ impl Pod {
         let pod = Self {
             tx: tx,
             workers: Vec::with_capacity(n_workers),
-            vacancies: Vec::with_capacity(n_workers),
+            vacancies: HashSet::with_capacity(n_workers),
             tasks: TaskTracker::new(),
             monitor: {
                 let m = Monitor::new(pod_handle.clone());
@@ -57,11 +59,15 @@ impl Pod {
     /// You **must** check if this pod has a vacancy first.
     #[inline(always)]
     pub fn get_next_worker_id(&mut self) -> usize {
-        self.vacancies.pop().unwrap_or_else(|| {
-            let ln = self.workers.len();
-            self.workers.push(None);
-            ln
-        })
+        self.vacancies
+            .iter()
+            .next()
+            .map(|item| *item)
+            .unwrap_or_else(|| {
+                let ln = self.workers.len();
+                self.workers.push(None);
+                ln
+            })
     }
 
     /// Puts a worker in the pod.
@@ -82,8 +88,13 @@ impl Pod {
     pub fn remove_worker(&mut self, id: usize) -> bool {
         if let Some(worker) = self.workers.get_mut(id) {
             let res = worker.take();
+
+            if res.is_none() {
+                return false;
+            }
+
             if res.is_some() {
-                self.vacancies.push(id);
+                self.vacancies.insert(id);
                 true
             } else {
                 false
@@ -96,7 +107,7 @@ impl Pod {
     #[inline]
     pub fn mark_worker_as_sleeping(&mut self, id: usize) -> bool {
         if self.workers.get_mut(id).is_some() {
-            self.vacancies.push(id);
+            self.vacancies.insert(id);
             true
         } else {
             false

@@ -1,6 +1,5 @@
 mod compile;
 mod intrinsics;
-mod language;
 mod macros;
 mod runtime;
 
@@ -78,14 +77,14 @@ struct RunArgs {
 
     /// The number of pods (threads) for serverless execution.
     #[arg(long, required = true)]
-    n_pods: usize,
+    pods: usize,
 
     /// The number of workers per pod (thread) for serverless execution.
     /// It's recommended to use a lower amount so the delay between
     /// switching await points (which is usually caused by CPU tasks)
     /// can be reduced.
     #[arg(long, required = true)]
-    n_workers_per_pod: usize,
+    workers_per_pod: usize,
 }
 
 #[derive(clap::Args)]
@@ -162,8 +161,8 @@ fn main() {
             };
 
             rt.block_on(start(
-                args.n_pods,
-                args.n_workers_per_pod,
+                args.pods,
+                args.workers_per_pod,
                 SocketAddr::new(
                     IpAddr::from_str(&args.host.as_ref().map(|k| &**k).unwrap_or("127.0.0.1"))
                         .expect("failed to parse ip addr"),

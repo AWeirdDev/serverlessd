@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::language::ExceptionDetails;
+use svld_language::ExceptionDetails;
 
 #[derive(Debug, Error)]
 pub enum WorkerError {

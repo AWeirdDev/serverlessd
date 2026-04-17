@@ -46,6 +46,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
             }
 
             PodTrigger::MarkWorkerAsSleeping { id } => {
+                tracing::info!("mark worker {id} as sleeping");
                 let _ = pod.mark_worker_as_sleeping(id);
             }
 

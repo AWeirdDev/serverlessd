@@ -6,11 +6,9 @@ use reqwest::{
 };
 use v8::{Global, Local, Object, PromiseResolver};
 
-use crate::{
-    intrinsics::response::Response,
-    language::{ThrowException, throw},
-    runtime::WorkerState,
-};
+use svld_language::{ThrowException, throw};
+
+use crate::{intrinsics::response::Response, runtime::WorkerState};
 
 macro_rules! some {
     ($k:expr) => {{
