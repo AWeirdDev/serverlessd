@@ -4,6 +4,7 @@ use tokio::sync::oneshot;
 use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
 
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
+use svld_state_extensions::ReplierWorkerStateExtension;
 
 use crate::{
     compile, intrinsics,
@@ -12,6 +13,7 @@ use crate::{
         worker::{
             MonitorHandle, WorkerTx,
             error::WorkerError,
+            state::CreateWorkerState,
             trigger::{WorkerRx, WorkerTrigger},
         },
     },
@@ -268,8 +270,6 @@ async fn create_task(
         }
         try_catch.perform_microtask_checkpoint();
 
-        state.cleanup_dead_repliers();
-
         match event {
             // ===== bad events =====
             WorkerTrigger::StartTask { .. } => {
@@ -311,8 +311,12 @@ async fn create_task(
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
-                    let idx = state.get_next_replier_idx();
-                    state.add_replier(idx, replier_ptr);
+                    let replier_shell = unsafe {
+                        state
+                            .get_extension::<ReplierWorkerStateExtension>()
+                            .unwrap_unchecked()
+                    };
+                    replier_shell.set_replier(replier_ptr);
 
                     {
                         let resolve = Function::builder(
@@ -398,8 +402,14 @@ async fn init_worker_for_task(
 ) -> Result<InitResult, WorkerError> {
     let WorkerTask { source, platform } = task;
 
-    let Some(state) =
-        WorkerState::create_injected(platform, isolate, worker_id, tx, monitor_handle).await
+    let Some(state) = WorkerState::create_injected(CreateWorkerState {
+        platform,
+        isolate,
+        worker_id,
+        worker_tx: tx,
+        monitor_handle,
+    })
+    .await
     else {
         return Err(WorkerError::Unknown(
             "failed to create worker state".to_string(),

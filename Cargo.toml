@@ -25,9 +25,11 @@ hex = "0.4.3"
 dotenvy = "0.15.7"
 async-trait = "0.1.89"
 rand = "0.10.0"
+smallvec = "1.15.1"
 
 # custom deps
 svld-language = { path = "./crates/svld-language" }
+svld-state-extensions = { path = "./crates/svld-state-extensions" }
 
 [dev-dependencies]
 # pnet = "0.35.0"
@@ -35,5 +37,6 @@ svld-language = { path = "./crates/svld-language" }
 [workspace]
 members = [
     "crates/svld-language",
-    "crates/svld-readable-stream"
+    "crates/svld-readable-stream",
+    "crates/svld-state-extensions"
 ]

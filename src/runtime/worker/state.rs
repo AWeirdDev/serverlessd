@@ -1,21 +1,14 @@
-use std::{
-    cell::{OnceCell, RefCell},
-    collections::VecDeque,
-    ffi::c_void,
-    ptr::NonNull,
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::VecDeque, ffi::c_void, ptr::NonNull, sync::Arc};
 
-use reqwest::Client;
-use tokio::sync::oneshot;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
 use svld_language::ThrowException;
+use svld_state_extensions::{
+    HttpClientWorkerExtension, ReplierWorkerStateExtension, WorkerStateExtensions,
+};
 
 use crate::runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx};
-
-type MaybeReplier = NonNull<Option<oneshot::Sender<String>>>;
 
 type ResolutionCallback =
     Box<dyn for<'s> FnOnce(&mut v8::PinScope<'s, '_>) -> v8::Local<'s, v8::Value>>;
@@ -33,7 +26,26 @@ pub struct WorkerState {
     pub platform: SharedRef<Platform>,
     pub monitoring: Monitoring,
     pub extensions: WorkerStateExtensions,
-    pub repliers: RefCell<Vec<Option<MaybeReplier>>>,
+}
+
+/// Parameters for creating a worker state.
+#[repr(packed)]
+pub struct CreateWorkerState {
+    /// The platform the worker is on.
+    /// You can obtain this when initializing the platform with `v8`.
+    pub platform: SharedRef<Platform>,
+
+    /// The isolate pointer.
+    pub isolate: NonNull<OwnedIsolate>,
+
+    /// The ID of the worker.
+    pub worker_id: usize,
+
+    /// A event dispatcher for the worker.
+    pub worker_tx: WorkerTx,
+
+    /// The monitor handle.
+    pub monitor_handle: MonitorHandle,
 }
 
 impl WorkerState {
@@ -43,11 +55,13 @@ impl WorkerState {
     /// `isolate` must exist.
     #[inline(always)]
     pub async fn create_injected(
-        platform: SharedRef<Platform>,
-        isolate: NonNull<OwnedIsolate>,
-        worker_id: usize,
-        worker_tx: WorkerTx,
-        monitor_handle: MonitorHandle,
+        CreateWorkerState {
+            platform,
+            isolate,
+            worker_id,
+            worker_tx,
+            monitor_handle,
+        }: CreateWorkerState,
     ) -> Option<Arc<Self>> {
         let isolate_handle = unsafe { isolate.as_ref() }.thread_safe_handle();
 
@@ -60,8 +74,11 @@ impl WorkerState {
             monitoring: monitor_handle
                 .start_monitoring(isolate_handle, worker_id, worker_tx)
                 .await?,
-            extensions: WorkerStateExtensions::default(),
-            repliers: RefCell::new(vec![]),
+            extensions: {
+                WorkerStateExtensions::new::<2>() // IMPORTANT: put the exact amount here!
+                    .with_extension(HttpClientWorkerExtension::new())
+                    .with_extension(ReplierWorkerStateExtension::new())
+            },
         });
 
         let item = Arc::clone(&slf);
@@ -129,54 +146,6 @@ impl WorkerState {
         self.monitoring.monitored_future(f)
     }
 
-    /// Clean up dead repliers.
-    #[inline]
-    pub fn cleanup_dead_repliers(&self) {
-        let mut repliers = self.repliers.borrow_mut();
-        for maybe_replier in repliers.iter_mut() {
-            if let Some(replier) = maybe_replier {
-                if unsafe { &*replier.as_ptr() }.is_none() {
-                    maybe_replier.take();
-                }
-            }
-        }
-    }
-
-    /// Gets the next replier index to use for safe dropping.
-    pub fn get_next_replier_idx(&self) -> usize {
-        self.cleanup_dead_repliers();
-        let mut repliers = self.repliers.borrow_mut();
-        let idx = {
-            let maybe_idx = repliers
-                .iter()
-                .enumerate()
-                .find(|(_, k)| k.is_none())
-                .map(|(idx, _)| idx);
-
-            match maybe_idx {
-                Some(idx) => idx,
-                None => {
-                    let length = repliers.len();
-                    repliers.push(None);
-                    length
-                }
-            }
-        };
-
-        idx
-    }
-
-    /// Add a replier to the `idx`.
-    ///
-    /// # Safety
-    /// Index of `idx` must exist. You can use `get_next_replier_idx()`.
-    pub fn add_replier(&self, idx: usize, replier: *mut Option<oneshot::Sender<String>>) {
-        let mut repliers = self.repliers.borrow_mut();
-        let shell = unsafe { repliers.get_mut(idx).unwrap_unchecked() };
-        let ptr = unsafe { NonNull::new_unchecked(replier) };
-        shell.replace(ptr);
-    }
-
     /// Schedule promise resolution.
     #[inline]
     pub fn schedule_resolution(&self, resolver: Global<PromiseResolver>, result: ResolutionResult) {
@@ -184,55 +153,9 @@ impl WorkerState {
             .borrow_mut()
             .push_back((resolver, result));
     }
-}
 
-impl Drop for WorkerState {
-    fn drop(&mut self) {
-        // we need to clean **all** repliers now
-        let mut repliers = self.repliers.borrow_mut();
-        for maybe_replier in repliers.drain(..) {
-            if let Some(replier) = maybe_replier {
-                if unsafe { &*replier.as_ptr() }.is_some() {
-                    let item = unsafe { &mut *replier.as_ptr() };
-                    if let Some(item) = item.take() {
-                        item.send(String::new()).ok();
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ====== state extensions =====
-#[derive(Default)]
-pub struct WorkerStateExtensions {
-    client: OnceCell<Client>,
-}
-
-impl WorkerStateExtensions {
-    /// Adds an HTTP client to the state, ignoring errors.
-    pub fn add_client(&self) {
-        self.client
-            .set(
-                Client::builder()
-                    .tls_backend_rustls()
-                    .default_headers({
-                        use reqwest::header::{HeaderMap, HeaderValue};
-
-                        let mut headers = HeaderMap::new();
-                        headers.append("User-Agent", HeaderValue::from_static("Serverless"));
-
-                        headers
-                    })
-                    .build()
-                    .expect("reqwest: cannot initialize tls backend or resolver error"),
-            )
-            .ok();
-    }
-
-    /// Gets the HTTP client, if exists.
     #[inline(always)]
-    pub fn get_client(&self) -> Option<&Client> {
-        self.client.get()
+    pub fn get_extension<T: Sized + 'static>(&self) -> Option<&T> {
+        self.extensions.get_extension()
     }
 }

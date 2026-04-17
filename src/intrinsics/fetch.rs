@@ -4,6 +4,7 @@ use reqwest::{
     Method,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
+use svld_state_extensions::HttpClientWorkerExtension;
 use v8::{Global, Local, Object, PromiseResolver};
 
 use svld_language::{ThrowException, throw};
@@ -59,8 +60,14 @@ pub fn fetch(
     tracing::info!("fetch()");
     let state = WorkerState::get_from_isolate(scope);
 
-    state.extensions.add_client();
-    let client = unsafe { state.extensions.get_client().unwrap_unchecked() };
+    let client_extension = unsafe {
+        state
+            .extensions
+            .get_extension_unchecked::<HttpClientWorkerExtension>()
+    };
+
+    client_extension.add_client();
+    let client = unsafe { client_extension.get_client().unwrap_unchecked() };
 
     if args.length() == 0 {
         let exc = throw(
