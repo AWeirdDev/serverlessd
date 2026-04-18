@@ -204,7 +204,7 @@ impl Monitoring {
     /// ```
     #[inline(always)]
     pub fn tick(&self) {
-        self.tx.send(()).unwrap();
+        self.tx.send(()).ok();
     }
 
     /// Create a monitored future. Ticking is done between task polls.
