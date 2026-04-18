@@ -71,7 +71,7 @@ impl Monitor {
         worker_id: usize,
         worker_tx: WorkerTx,
     ) -> Monitoring {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::unbounded_channel();
 
         let mw = MonitoredWorker::new(isolate_handle, worker_tx, rx);
         self.tracker
@@ -120,12 +120,16 @@ impl MonitorHandle {
 pub struct MonitoredWorker {
     isolate: IsolateHandle,
     worker_tx: WorkerTx,
-    rx: mpsc::Receiver<()>,
+    rx: mpsc::UnboundedReceiver<()>,
 }
 
 impl MonitoredWorker {
     #[inline(always)]
-    pub fn new(isolate: IsolateHandle, worker_tx: WorkerTx, rx: mpsc::Receiver<()>) -> Self {
+    pub fn new(
+        isolate: IsolateHandle,
+        worker_tx: WorkerTx,
+        rx: mpsc::UnboundedReceiver<()>,
+    ) -> Self {
         Self {
             isolate,
             worker_tx,
@@ -152,7 +156,7 @@ async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
 
 pub struct MonitoredFuture<F> {
     inner: F,
-    tx: mpsc::Sender<()>,
+    tx: mpsc::UnboundedSender<()>,
 }
 
 impl<F: Future> Future for MonitoredFuture<F> {
@@ -165,9 +169,9 @@ impl<F: Future> Future for MonitoredFuture<F> {
         let this = unsafe { self.get_unchecked_mut() };
         let inner = unsafe { std::pin::Pin::new_unchecked(&mut this.inner) };
 
-        this.tx.try_send(()).ok();
+        this.tx.send(()).ok();
         let result = inner.poll(cx);
-        this.tx.try_send(()).ok();
+        this.tx.send(()).ok();
 
         result
     }
@@ -175,12 +179,12 @@ impl<F: Future> Future for MonitoredFuture<F> {
 
 #[repr(transparent)]
 pub struct Monitoring {
-    tx: mpsc::Sender<()>,
+    tx: mpsc::UnboundedSender<()>,
 }
 
 impl Monitoring {
     #[inline(always)]
-    fn new(tx: mpsc::Sender<()>) -> Self {
+    fn new(tx: mpsc::UnboundedSender<()>) -> Self {
         Self { tx }
     }
 
@@ -200,7 +204,7 @@ impl Monitoring {
     /// ```
     #[inline(always)]
     pub fn tick(&self) {
-        self.tx.try_send(()).unwrap();
+        self.tx.send(()).unwrap();
     }
 
     /// Create a monitored future. Ticking is done between task polls.
