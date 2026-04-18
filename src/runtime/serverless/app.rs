@@ -75,15 +75,32 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     let (pod, wrk) = match state.serverless.create_worker(name).await {
         Ok(t) => t,
         Err(err) => {
-            if let CreateWorkerError::UnknownWorker(_) = err {
-                res.status_code(StatusCode::NOT_FOUND);
-                res.add_header(
-                    HeaderName::from_static("content-type"),
-                    HeaderValue::from_static("text/html"),
-                    true,
-                )
-                .ok();
-                res.render(NotFoundTemplate.to_string());
+            match err {
+                CreateWorkerError::UnknownWorker(_) => {
+                    res.status_code(StatusCode::NOT_FOUND);
+                    res.add_header(
+                        HeaderName::from_static("content-type"),
+                        HeaderValue::from_static("text/html"),
+                        true,
+                    )
+                    .ok();
+                    res.render(NotFoundTemplate.to_string());
+                }
+                CreateWorkerError::CannotCreateTask => {
+                    res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+                    res.add_header(
+                        HeaderName::from_static("content-type"),
+                        HeaderValue::from_static("text/html"),
+                        true,
+                    )
+                    .ok();
+                    res.render(
+                        ErrorTemplate {
+                            reasoning: "We couldn't allocate any space for your worker. That's fucked up.",
+                        }
+                        .to_string(),
+                    );
+                }
             }
 
             return;
@@ -91,18 +108,34 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     };
 
     let Some(result) = state.serverless.send_http_to_worker(pod, wrk).await else {
-        res.render(errored(
-            "failed to execute worker; an unknown error occurred.",
-        ));
+        res.add_header(
+            HeaderName::from_static("content-type"),
+            HeaderValue::from_static("text/html"),
+            true,
+        )
+        .ok();
+        res.render(
+            ErrorTemplate {
+                reasoning: "Failed to execute worker; an unknown error occurred.",
+            }
+            .to_string(),
+        );
         return;
     };
 
     match result {
         Ok(t) => {
+            tracing::info!("got result {}", t);
             res.render(t);
         }
         Err(err) => {
             res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+            res.add_header(
+                HeaderName::from_static("content-type"),
+                HeaderValue::from_static("text/html"),
+                true,
+            )
+            .ok();
             res.render(
                 ErrorTemplate {
                     reasoning: &err.to_string(),

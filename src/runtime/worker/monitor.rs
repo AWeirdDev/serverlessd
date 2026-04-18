@@ -20,8 +20,8 @@ pub enum MonitorTrigger {
     },
 }
 
-type MonitorTx = mpsc::Sender<MonitorTrigger>;
-type MonitorRx = mpsc::Receiver<MonitorTrigger>;
+type MonitorTx = mpsc::UnboundedSender<MonitorTrigger>;
+type MonitorRx = mpsc::UnboundedReceiver<MonitorTrigger>;
 
 /// A monitor attached to a pod, which can be used to monitor threads.
 pub struct Monitor {
@@ -45,7 +45,7 @@ impl Monitor {
     /// Start monitoring a worker. There is no need to `join()` the thread.
     /// Cancelling does not matter for this context.
     pub fn start(self) -> MonitorHandle {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::unbounded_channel();
 
         thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -111,7 +111,6 @@ impl MonitorHandle {
                 worker_id,
                 worker_tx,
             })
-            .await
             .ok()?;
 
         recv.await.ok()
@@ -201,7 +200,7 @@ impl Monitoring {
     /// ```
     #[inline(always)]
     pub fn tick(&self) {
-        self.tx.try_send(()).ok();
+        self.tx.try_send(()).unwrap();
     }
 
     /// Create a monitored future. Ticking is done between task polls.
@@ -222,7 +221,9 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
     let walltime_tick = tokio::time::sleep(Duration::from_secs(10));
     tokio::pin!(walltime_tick);
 
+    tracing::info!("starting to receive!");
     while let Some(()) = mw.rx.recv().await {
+        tracing::info!("beep boop");
         if elapsed.as_secs() > 10 {
             tracing::error!("(per worker, 10s) time's up");
             break;
@@ -231,8 +232,6 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
         let start = Instant::now();
 
         tokio::select! {
-            // we still like the user at some point
-            // update: ok not really
             biased;
 
             _ = &mut walltime_tick => {
@@ -242,9 +241,7 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
             }
 
             _ = mw.rx.recv() => {
-                let task_time = start.elapsed();
-                // tracing::info!("elapsed: {:?}", task_time);
-                elapsed += task_time;
+                elapsed += start.elapsed();
             }
 
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
@@ -254,14 +251,7 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
         };
     }
 
-    // FIRST terminate
-    tracing::info!("terminating v8 execution");
-    if !mw.isolate.terminate_execution() {
-        tracing::error!("failed to terminate isolate when time's up (isolate already destroyed)");
-    }
-
-    // first we halt the current task
-    mw.worker_tx.try_send(WorkerTrigger::HaltTask).ok();
+    halt(&mw);
 
     // and then kill the whole isolate
     let (token, recv) = oneshot::channel();
@@ -271,4 +261,15 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
     tracing::info!("shutting down, removing worker");
     // after we successfully killed it, we can essentially 'remove' this worker
     let _ = pod.remove_worker(worker_id).await;
+}
+
+fn halt(mw: &MonitoredWorker) {
+    tracing::info!("terminating v8 execution");
+
+    if !mw.isolate.terminate_execution() {
+        tracing::warn!("failed to terminate isolate when time's up (isolate already destroyed)");
+    }
+
+    // we then halt the current task
+    mw.worker_tx.try_send(WorkerTrigger::HaltTask).ok();
 }

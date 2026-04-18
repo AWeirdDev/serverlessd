@@ -2,11 +2,11 @@ use std::{cell::OnceCell, ptr::NonNull};
 
 use tokio::sync::oneshot;
 
-use crate::WorkerStateExtension;
+use crate::Block;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ReplyError {
-    #[error("the worker timed out.")]
+    #[error("The worker timed out.")]
     TimedOut,
 }
 
@@ -39,11 +39,11 @@ type MaybeReplierPtr = *mut MaybeReplier;
 ///
 /// This is `!Sync`.
 #[repr(transparent)]
-pub struct ReplierWorkerStateExtension {
+pub struct ReplierBlock {
     pub replier: OnceCell<MaybeReplierNonNull>,
 }
 
-impl ReplierWorkerStateExtension {
+impl ReplierBlock {
     /// Create the extension.
     #[inline(always)]
     pub fn new() -> Self {
@@ -63,18 +63,16 @@ impl ReplierWorkerStateExtension {
     }
 }
 
-impl WorkerStateExtension for ReplierWorkerStateExtension {
-    fn drop_extension_data(slf: Box<dyn std::any::Any>)
+impl Block for ReplierBlock {
+    fn drop_block_data(slf: Box<dyn std::any::Any>)
     where
         Self: Sized + 'static,
     {
         let slf = unsafe { slf.downcast::<Self>().unwrap_unchecked() };
 
-        println!("DROP: ReplierWorkerStateExtension");
         let mut maybe_replier = slf.replier.get();
 
         if let Some(replier) = maybe_replier.as_mut() {
-            println!("replier exists!");
             if unsafe { &*replier.as_ptr() }.is_some() {
                 let item = unsafe { &mut *replier.as_ptr() };
                 if let Some(item) = item.take() {

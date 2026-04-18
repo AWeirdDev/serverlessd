@@ -30,7 +30,7 @@ askama = { version = "0.15.6", features = ["alloc", "derive"] }
 
 # custom deps
 svld-language = { path = "./crates/svld-language" }
-svld-state-extensions = { path = "./crates/svld-state-extensions" }
+svld-blocks = { path = "./crates/svld-blocks" }
 
 [dev-dependencies]
 # pnet = "0.35.0"
@@ -39,5 +39,5 @@ svld-state-extensions = { path = "./crates/svld-state-extensions" }
 members = [
     "crates/svld-language",
     "crates/svld-readable-stream",
-    "crates/svld-state-extensions"
+    "crates/svld-blocks",
 ]

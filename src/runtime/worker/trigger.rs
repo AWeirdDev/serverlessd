@@ -1,4 +1,5 @@
-use svld_state_extensions::Replier;
+use svld_blocks::Replier;
+
 use tokio::sync::{mpsc, oneshot};
 
 use crate::runtime::WorkerTask;

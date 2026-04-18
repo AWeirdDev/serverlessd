@@ -1,5 +1,6 @@
 [package]
-name = "svld-state-extensions"
+name = "svld-blocks"
+description = "Extensible blocks for the worker state."
 version = "0.1.0"
 edition = "2024"
 

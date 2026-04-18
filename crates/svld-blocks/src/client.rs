@@ -2,16 +2,16 @@ use std::cell::OnceCell;
 
 use reqwest::Client;
 
-use crate::WorkerStateExtension;
+use crate::Block;
 
 /// An HTTP client extension.
 #[repr(transparent)]
 #[derive(Default)]
-pub struct HttpClientWorkerExtension {
+pub struct HttpClientBlock {
     client: OnceCell<Client>,
 }
 
-impl HttpClientWorkerExtension {
+impl HttpClientBlock {
     #[inline(always)]
     pub const fn new() -> Self {
         Self {
@@ -46,4 +46,4 @@ impl HttpClientWorkerExtension {
     }
 }
 
-impl WorkerStateExtension for HttpClientWorkerExtension {}
+impl Block for HttpClientBlock {}

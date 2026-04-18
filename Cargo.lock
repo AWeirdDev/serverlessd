@@ -2607,8 +2607,8 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "smallvec",
+ "svld-blocks",
  "svld-language",
- "svld-state-extensions",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -2765,6 +2765,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "svld-blocks"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "thiserror 2.0.18",
+ "tokio",
+ "typeid",
+]
+
+[[package]]
 name = "svld-language"
 version = "0.1.0"
 dependencies = [
@@ -2783,16 +2793,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "v8",
-]
-
-[[package]]
-name = "svld-state-extensions"
-version = "0.1.0"
-dependencies = [
- "reqwest",
- "thiserror 2.0.18",
- "tokio",
- "typeid",
 ]
 
 [[package]]

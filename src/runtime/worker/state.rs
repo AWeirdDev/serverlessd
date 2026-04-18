@@ -4,10 +4,8 @@ use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
+use svld_blocks::{Blocks, HttpClientBlock, ReplierBlock};
 use svld_language::ThrowException;
-use svld_state_extensions::{
-    HttpClientWorkerExtension, ReplierWorkerStateExtension, WorkerStateExtensions,
-};
 
 use crate::runtime::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx};
 
@@ -28,7 +26,7 @@ pub struct WorkerState {
     pub isolate: NonNull<OwnedIsolate>,
     pub platform: SharedRef<Platform>,
     pub monitoring: Monitoring,
-    pub extensions: WorkerStateExtensions,
+    pub extensions: Blocks,
 }
 
 /// Parameters for creating a worker state.
@@ -79,9 +77,9 @@ impl WorkerState {
                 .start_monitoring(isolate_handle, worker_id, worker_tx)
                 .await?,
             extensions: {
-                WorkerStateExtensions::new::<2>() // IMPORTANT: put the exact amount here!
-                    .with_extension(ReplierWorkerStateExtension::new())
-                    .with_extension(HttpClientWorkerExtension::new())
+                Blocks::new::<2>() // IMPORTANT: put the exact amount here!
+                    .with_block(ReplierBlock::new())
+                    .with_block(HttpClientBlock::new())
             },
         });
 
@@ -182,12 +180,12 @@ impl WorkerState {
 
     /// Get extension data of type `T`.
     #[inline(always)]
-    pub fn get_extension<T: Sized + 'static>(&self) -> Option<&T> {
-        self.extensions.get_extension()
+    pub fn get_block<T: Sized + 'static>(&self) -> Option<&T> {
+        self.extensions.get_block()
     }
 
     #[inline(always)]
-    pub unsafe fn get_extension_unchecked<T: Sized + 'static>(&self) -> &T {
-        unsafe { self.get_extension::<T>().unwrap_unchecked() }
+    pub unsafe fn get_block_unchecked<T: Sized + 'static>(&self) -> &T {
+        unsafe { self.get_block::<T>().unwrap_unchecked() }
     }
 }

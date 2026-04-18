@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        />
+        <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+        <title>{% block title %}serverlessd{%endblock%}</title>
+    </head>
+    <body
+        style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 90vh;
+            color: #0f0807;
+        "
+    >
+        {% include "svld.html" %}
+        <h1
+            style="
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    &quot;Segoe UI&quot;,
+                    Roboto,
+                    Oxygen,
+                    Ubuntu,
+                    Cantarell,
+                    &quot;Open Sans&quot;,
+                    &quot;Helvetica Neue&quot;,
+                    sans-serif;
+            "
+        >
+            {% block heading %}Server running{% endblock %}
+        </h1>
+        <p style="font-family: monospace">
+            {% block description %}{% endblock %}
+        </p>
+    </body>
+</html>

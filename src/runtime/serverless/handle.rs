@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use svld_state_extensions::Reply;
+use svld_blocks::Reply;
 use tokio::sync::oneshot;
 
 use crate::runtime::{

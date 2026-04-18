@@ -4,7 +4,7 @@ use reqwest::{
     Method,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
-use svld_state_extensions::HttpClientWorkerExtension;
+use svld_blocks::HttpClientBlock;
 use v8::{Global, Local, Object, PromiseResolver};
 
 use svld_language::{ThrowException, throw};
@@ -60,11 +60,7 @@ pub fn fetch(
     tracing::info!("fetch()");
     let state = WorkerState::get_from_isolate(scope);
 
-    let client_extension = unsafe {
-        state
-            .extensions
-            .get_extension_unchecked::<HttpClientWorkerExtension>()
-    };
+    let client_extension = unsafe { state.extensions.get_block_unchecked::<HttpClientBlock>() };
 
     client_extension.add_client();
     let client = unsafe { client_extension.get_client().unwrap_unchecked() };
@@ -175,8 +171,6 @@ pub fn fetch(
     let fut = {
         let state2 = state.clone();
         state.monitored_future(async move {
-            state2.tick_monitoring();
-
             let result = rq.send().await;
 
             match result {

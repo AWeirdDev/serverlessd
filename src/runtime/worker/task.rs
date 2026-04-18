@@ -2,8 +2,8 @@ use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 
 use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
 
+use svld_blocks::{MaybeReplier, ReplierBlock};
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
-use svld_state_extensions::{MaybeReplier, ReplierWorkerStateExtension};
 
 use crate::{
     compile, intrinsics,
@@ -124,10 +124,12 @@ pub(super) async fn create_cancel_safe_task(
                     }
                     Err(err) => {
                         tracing::error!("got error on closed handler, {:?}", err);
+
+                        drop_isolate(isolate_ptr);
+                        break;
                     }
                 }
 
-                // at this point, the work is done
                 pod_tx
                     .send(PodTrigger::MarkWorkerAsSleeping { id })
                     .await
@@ -274,7 +276,9 @@ async fn create_task(
                     }
                 }
             }
+            state.tick_monitoring();
             try_catch.perform_microtask_checkpoint();
+            state.tick_monitoring();
         }
 
         let Some(maybe_event) = maybe_event_if_trigger else {
@@ -290,10 +294,11 @@ async fn create_task(
                 tracing::error!("unwanted 'start task' event while in worker loop");
                 break;
             }
-            WorkerTrigger::Kill { .. } => {
+            WorkerTrigger::Kill { token } => {
                 tracing::error!(
                     "unwanted 'kill' event while in worker loop; use WorkerTrigger::HaltTask first. ignoring."
                 );
+                token.send(()).ok();
                 continue;
             }
 
@@ -306,21 +311,22 @@ async fn create_task(
 
             WorkerTrigger::Http { reply } => {
                 tracing::info!("worker received http");
+
                 if let Some(fetch) = entrypoint_fetch {
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
-                    let replier_shell =
-                        unsafe { state.get_extension_unchecked::<ReplierWorkerStateExtension>() };
+                    let replier_shell = unsafe { state.get_block_unchecked::<ReplierBlock>() };
                     replier_shell.set_replier(replier_ptr);
 
+                    // next: call
                     state.tick_monitoring();
-
+                    tracing::info!("calling fetch...");
                     let Some(result) = fetch.call(try_catch, v8::undefined(try_catch).cast(), &[])
                     else {
                         return Err(WorkerError::Timeout);
                     };
-
+                    tracing::info!("fetch called");
                     state.tick_monitoring();
 
                     if !result.is_promise() {
@@ -334,9 +340,6 @@ async fn create_task(
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,
                              _rv: v8::ReturnValue| {
-                                let state = WorkerState::get_from_isolate(scope);
-                                state.tick_monitoring(); // the cpu task is done. nice!
-
                                 // this is a mutable reference, NOT OWNED!!!!!!
                                 let replier = unsafe {
                                     &mut *(args.data().cast::<External>().value()
@@ -368,9 +371,6 @@ async fn create_task(
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,
                              _rv: v8::ReturnValue| {
-                                let state = WorkerState::get_from_isolate(scope);
-                                state.tick_monitoring();
-
                                 let replier = unsafe {
                                     &mut *(args.data().cast::<External>().value()
                                         as *mut MaybeReplier)
@@ -388,7 +388,9 @@ async fn create_task(
                         promise.catch(try_catch, unwrap!(try_catch, some runtime reject));
                     }
 
+                    state.tick_monitoring();
                     try_catch.perform_microtask_checkpoint();
+                    state.tick_monitoring();
                 }
             }
 
@@ -466,8 +468,6 @@ async fn init_worker_for_task(
 
         let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
 
-        state.tick_monitoring();
-
         // instantiate imports, etc.
         {
             let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
@@ -482,19 +482,19 @@ async fn init_worker_for_task(
         };
         let promise = promise.cast::<Promise>();
 
-        state.tick_monitoring();
-
         (
             Global::new(try_catch, module),
             Global::new(try_catch, promise),
         )
     };
 
+    state.tick_monitoring();
     // we gotta wait for it to initialize
     {
         let isolate = unsafe { state.get_isolate() };
         while Platform::pump_message_loop(&state.platform, isolate, false) {}
     }
+    state.tick_monitoring();
 
     Ok(InitResult {
         state,
