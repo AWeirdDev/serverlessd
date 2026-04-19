@@ -1,14 +1,14 @@
 use std::collections::VecDeque;
 
-use v8::{Function, Global, Object, Value};
+use v8::{Function, Global, Object, PromiseResolver, Value};
 
-pub(crate) enum StreamInternalState {
+pub enum StreamInternalState {
     Readable,
     Closed,
     Errored(Global<Value>),
 }
 
-pub(crate) struct ReadableStreamState {
+pub struct ReadableStreamState {
     /// Enqueued chunks waiting to be read.
     pub queue: VecDeque<Global<Value>>,
 
@@ -26,6 +26,11 @@ pub(crate) struct ReadableStreamState {
 
     /// `underlyingSource.cancel` — called when the consumer cancels the stream.
     pub cancel_fn: Option<Global<Function>>,
+
+    /// Parked `read()` resolvers waiting for a chunk to arrive.
+    /// When `enqueue()` is called and this is non-empty, the front resolver is
+    /// resolved immediately instead of buffering the chunk.
+    pub pending_reads: VecDeque<Global<PromiseResolver>>,
 }
 
 impl ReadableStreamState {
@@ -38,6 +43,7 @@ impl ReadableStreamState {
             controller: None,
             pull_fn,
             cancel_fn,
+            pending_reads: VecDeque::new(),
         }
     }
 

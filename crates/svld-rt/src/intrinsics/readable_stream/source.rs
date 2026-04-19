@@ -1,6 +1,7 @@
 use v8::{Function, Global, Local, Object, PinScope, Value};
 
-pub(crate) struct UnderlyingSource {
+#[allow(unused)]
+pub struct UnderlyingSource {
     /// Called once on construction.
     /// Set up push sources or enqueue initial chunks here.
     ///
@@ -47,6 +48,10 @@ impl UnderlyingSource {
         scope: &PinScope<'s, '_>,
         value: Local<'s, Value>,
     ) -> Result<Self, UnderlyingSourceParseError> {
+        if value.is_undefined() {
+            return Err(UnderlyingSourceParseError::Undefined);
+        }
+
         if !value.is_object() || value.is_null() {
             return Err(UnderlyingSourceParseError::NotObject);
         }
@@ -88,7 +93,7 @@ impl UnderlyingSource {
         Ok(Self {
             start: start_fn.map(|item| Global::new(scope, item)),
             pull: pull_fn.map(|item| Global::new(scope, item)),
-            cancel: pull_fn.map(|item| Global::new(scope, item)),
+            cancel: cancel_fn.map(|item| Global::new(scope, item)),
             type_,
             auto_allocate_chunk_size,
         })

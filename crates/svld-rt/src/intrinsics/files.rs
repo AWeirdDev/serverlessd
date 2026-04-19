@@ -4,6 +4,7 @@
 include!(concat!(env!("OUT_DIR"), "/files.rs"));
 
 #[inline]
+#[allow(unused)]
 pub(super) fn get_builtin_file(name: &str) -> Option<&str> {
     FILES
         .iter()

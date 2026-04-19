@@ -29,15 +29,18 @@ impl Blocks {
         }
     }
 
-    /// Pushes an block.
+    /// Adds a block.
     #[inline(always)]
     pub fn add_block<T: Block + 'static>(self, block: T) -> Self {
-        {
-            let mut blocks = self.blocks.borrow_mut();
-            blocks.push((T::TYPE, Box::new(block) as _, T::drop_block_data));
-        }
-
+        self.push_block(block);
         self
+    }
+
+    /// Pushes a block.
+    #[inline(always)]
+    pub fn push_block<T: Block + 'static>(&self, block: T) {
+        let mut blocks = self.blocks.borrow_mut();
+        blocks.push((T::TYPE, Box::new(block) as _, T::drop_block_data));
     }
 
     /// Runs callback on the block of type `T`.
@@ -67,6 +70,14 @@ impl Blocks {
     #[inline(always)]
     pub unsafe fn with_block_unchecked<T: 'static, R>(&self, callback: impl FnOnce(&T) -> R) -> R {
         unsafe { self.with_block::<T, R>(callback).unwrap_unchecked() }
+    }
+
+    /// Checks if a block exists.
+    pub fn has_block<T: 'static>(&self) -> bool {
+        let id = ConstTypeId::of::<T>();
+        let blocks = self.blocks.borrow();
+
+        blocks.iter().find(|block| block.0 == id).is_some()
     }
 }
 

@@ -495,8 +495,7 @@ async fn init_worker_for_task(
         );
         try_catch!(scope: scope, let try_catch);
 
-        let intrinsics_obj =
-            unwrap!(try_catch, some init intrinsics::build_intrinsics(&state.platform, try_catch));
+        let intrinsics_obj = unwrap!(try_catch, some init intrinsics::build_intrinsics(try_catch));
 
         // we're gonna put them in the global
         {

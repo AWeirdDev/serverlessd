@@ -1,133 +1,49 @@
-use std::mem;
+use v8::{GetPropertyNamesArgs, Global, Isolate, Local, PinScope};
 
-use v8::{
-    GetPropertyNamesArgs, Global, Isolate, Local, PinScope, Platform, Promise, PromiseState,
-    SharedRef,
-};
+use crate::{intrinsics, scope_with_context};
 
-use crate::{
-    compile::compile_module,
-    intrinsics::{self, files::get_builtin_file},
-    scope_with_context,
-};
+fn add_to_scope<'s>(
+    scope: &PinScope<'s, '_>,
+    obj: Local<'s, v8::Object>,
+    name: &'static str,
+    value: Local<'s, v8::Value>,
+) -> Option<()> {
+    let k = v8::String::new(scope, name)?;
+    obj.set(scope, k.into(), value.into());
 
-/// Add a function. Example:
-///
-/// ```no_run
-/// add_fn!(
-///     let add = intrinsics::add,
-///     in: intrinsics_obj,
-///     scope: scope
-/// );
-/// ```
-macro_rules! add_fn {
-    (let $name:ident = $k:expr, in: $obj:ident, scope: $scope:expr) => {{
-        let fnk = v8::Function::new($scope, $k)?;
-        let k = v8::String::new($scope, stringify!($name))?;
-        $obj.set($scope, k.into(), fnk.into());
-    }};
-}
-
-fn resolve_module_callback_intrinsics<'a>(
-    context: v8::Local<'a, v8::Context>,
-    specifier: v8::Local<'a, v8::String>,
-    _import_attributes: v8::Local<'a, v8::FixedArray>,
-    _referrer: v8::Local<'a, v8::Module>,
-) -> Option<v8::Local<'a, v8::Module>> {
-    let scope = std::pin::pin!(unsafe { v8::CallbackScope::new(context) });
-    let scope_rf = &mut scope.init();
-
-    let specifier_str = specifier.to_rust_string_lossy(scope_rf);
-    if !specifier_str.starts_with("intrinsics:") {
-        // relative imports are not supported here
-        // or rather because im lazy
-        //
-        // use:
-        // import { something } from "intrinsics:someFile"
-        // instead, looks cleaner aint it? no it doesnt
-        return None;
-    }
-
-    let Some(code) = get_builtin_file(&specifier_str) else {
-        return None;
-    };
-
-    let compiled = compile_module(scope_rf, code, &specifier_str);
-
-    // essentially this shit is still managed by the v8 runtime, so
-    // literally all we have to do is not make rust fury about the
-    // `compiled` variable living only in this function scope (which is
-    // false, because we pin it, and the rust compiler cannot reason
-    // about such problems, since we're dealing with the bindings here)
-    Some(unsafe { mem::transmute::<_, Local<'a, v8::Module>>(compiled) })
+    Some(())
 }
 
 /// Build intrinsics and store them in a [`Global`]-sealed [`v8::Value`].
 #[must_use]
-pub fn build_intrinsics(
-    platform: &SharedRef<Platform>,
-    isolate: &mut Isolate,
-) -> Option<Global<v8::Value>> {
-    let (module, promised) = {
-        scope_with_context!(
-            isolate: isolate,
-            let &mut scope,
-            let context
-        );
-
-        let intrinsics_obj = v8::Object::new(scope);
-
-        // fetch()
-        add_fn!(
-            let fetch = intrinsics::fetch,
-            in: intrinsics_obj,
-            scope: scope
-        );
-
-        // point()
-        add_fn!(
-            let point = intrinsics::point,
-            in: intrinsics_obj,
-            scope: scope
-        );
-
-        context.global(scope).set(
-            scope,
-            v8::String::new(scope, "intrinsics")?.cast(),
-            intrinsics_obj.cast(),
-        );
-
-        let source = get_builtin_file("intrinsics:index")?;
-
-        let module = compile_module(scope, source, "index")?;
-        module.instantiate_module(scope, resolve_module_callback_intrinsics)?;
-
-        let promised = module
-            .evaluate(scope)
-            .expect("failed to evaluate")
-            .cast::<Promise>();
-
-        (Global::new(scope, module), Global::new(scope, promised))
-    };
-
-    // wait for the module to load
-    while Platform::pump_message_loop(&platform, isolate, false) {}
-
+pub fn build_intrinsics(isolate: &mut Isolate) -> Option<Global<v8::Value>> {
     scope_with_context!(
         isolate: isolate,
         let &mut scope,
         let context
     );
 
-    let module = Local::new(scope, module);
-    let promised = Local::new(scope, promised);
+    let intrinsics_obj = v8::Object::new(scope);
 
-    if matches!(promised.state(), PromiseState::Rejected) {
-        panic!("failed to build intrinsics");
+    // fetch()
+    {
+        let f = v8::Function::new(scope, intrinsics::fetch)?;
+        add_to_scope(scope, intrinsics_obj, "fetch", f.cast());
     }
 
-    let namespace = module.get_module_namespace();
-    Some(Global::new(scope, namespace))
+    // ReadableStream
+    {
+        let rs = intrinsics::JsReadableStream::build_object(scope)?;
+        add_to_scope(scope, intrinsics_obj, "ReadableStream", rs.cast());
+    }
+
+    // dev only
+    if cfg!(debug_assertions) {
+        let f = v8::Function::new(scope, intrinsics::point)?.cast();
+        add_to_scope(scope, intrinsics_obj, "point", f);
+    }
+
+    Some(Global::new(scope, intrinsics_obj.cast()))
 }
 
 /// Extract intrinsics to the scope so it can be used by the user.
