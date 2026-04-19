@@ -43,9 +43,18 @@ macro_rules! unwrap {
         unwrap!($try_catch, some WorkerError::ModuleInitError => $k)
     };
 
-    ($try_catch:expr, some runtime $k:expr) => {
-        unwrap!($try_catch, some WorkerError::RuntimeError => $k)
-    };
+    ($try_catch:expr, some runtime $k:expr) => {{
+        let Some(k) = $k else {
+            return Err(
+                WorkerError::RuntimeError(
+                    $try_catch.exception_details()
+                        .map(|item| format!("{:?}", item))
+                        .unwrap_or_else(|| "internal unexpected error".to_string())
+                )
+            );
+        };
+        k
+    }};
 }
 
 /// The worker task.
@@ -419,7 +428,9 @@ async fn create_task(
 
                                 if let Some(replier) = replier.take() {
                                     replier
-                                        .send(Ok(args.get(0).to_rust_string_lossy(scope)))
+                                        .send(Err(WorkerError::RuntimeError(
+                                            args.get(0).to_rust_string_lossy(scope),
+                                        )))
                                         .ok();
                                 }
                             },

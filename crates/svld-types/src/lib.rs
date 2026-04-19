@@ -7,7 +7,7 @@ use svld_language::ExceptionDetails;
 pub enum WorkerError {
     /// Error at runtime.
     #[error("Runtime error, details: {0:?}")]
-    RuntimeError(Option<ExceptionDetails>),
+    RuntimeError(String),
 
     /// Failed to compile.
     #[error("Failed to compile, details: {0:?}")]

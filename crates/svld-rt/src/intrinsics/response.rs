@@ -17,8 +17,17 @@ impl JsResponse {
 
     pub fn get_new_fn<'s>(scope: &v8::PinScope<'s, '_>) -> Option<Local<'s, Value>> {
         let function_template = v8::FunctionTemplate::new(scope, Self::js_constructor);
-        let function = function_template.get_function(scope)?;
 
+        let name = v8::String::new(scope, "Response")?;
+        function_template.set_class_name(name);
+
+        {
+            let k = v8::String::new(scope, "json")?;
+            let f = v8::FunctionTemplate::new(scope, Self::js_static_json);
+            function_template.set(k.cast(), f.cast());
+        }
+
+        let function = function_template.get_function(scope)?;
         Some(function.cast())
     }
 
@@ -55,7 +64,7 @@ impl JsResponse {
     }
 
     /// `json()` static method.
-    fn static_json(
+    fn js_static_json(
         scope: &mut v8::PinScope,
         args: v8::FunctionCallbackArguments,
         mut rv: v8::ReturnValue,
@@ -198,7 +207,7 @@ impl<'s> ResponseBuilder<'s> {
         self.this.set(
             scope,
             body_k.cast(),
-            rs.call(scope, v8::undefined(scope).cast(), &[data])?,
+            rs.new_instance(scope, &[data])?.cast(),
         );
 
         Some(self)
