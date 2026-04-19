@@ -88,7 +88,7 @@ pub(super) async fn create_cancel_safe_task(
     }: WarmUpWorkerArgs,
 ) {
     let mut isolate = Box::new(v8::Isolate::new(Default::default()));
-    isolate.set_microtasks_policy(v8::MicrotasksPolicy::Auto);
+    isolate.set_microtasks_policy(v8::MicrotasksPolicy::Explicit);
 
     let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
 
@@ -123,8 +123,6 @@ pub(super) async fn create_cancel_safe_task(
                     }
                     Err(err) => {
                         tracing::error!("got error on closed handler, {:?}", err);
-
-                        drop_isolate(isolate_ptr);
                         break;
                     }
                 }
