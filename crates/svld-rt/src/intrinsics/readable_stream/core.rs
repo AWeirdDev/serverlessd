@@ -23,7 +23,7 @@ use crate::{
 pub struct JsReadableStream;
 
 impl JsReadableStream {
-    pub fn build_object<'s>(scope: &mut PinScope<'s, '_>) -> Option<Local<'s, Value>> {
+    pub fn get_new_fn<'s>(scope: &mut PinScope<'s, '_>) -> Option<Local<'s, Value>> {
         let func_tmpl = v8::FunctionTemplate::new(scope, Self::js_constructor);
 
         let name = v8::String::new(scope, "ReadableStream")?;

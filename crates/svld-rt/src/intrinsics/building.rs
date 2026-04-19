@@ -33,8 +33,14 @@ pub fn build_intrinsics(isolate: &mut Isolate) -> Option<Global<v8::Value>> {
 
     // ReadableStream
     {
-        let rs = intrinsics::JsReadableStream::build_object(scope)?;
+        let rs = intrinsics::JsReadableStream::get_new_fn(scope)?;
         add_to_scope(scope, intrinsics_obj, "ReadableStream", rs.cast());
+    }
+
+    // Response
+    {
+        let rs = intrinsics::JsResponse::get_new_fn(scope)?;
+        add_to_scope(scope, intrinsics_obj, "Response", rs.cast());
     }
 
     // dev only
