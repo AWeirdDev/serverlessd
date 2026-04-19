@@ -2589,7 +2589,7 @@ dependencies = [
 
 [[package]]
 name = "serverlessd"
-version = "0.0.3"
+version = "0.0.5"
 dependencies = [
  "askama",
  "async-trait",
@@ -2763,6 +2763,7 @@ name = "svld-blocks"
 version = "0.1.0"
 dependencies = [
  "reqwest",
+ "svld-types",
  "thiserror 2.0.18",
  "tokio",
  "typeid",
@@ -2787,11 +2788,20 @@ dependencies = [
  "serde_json",
  "svld-blocks",
  "svld-language",
+ "svld-types",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
  "v8",
+]
+
+[[package]]
+name = "svld-types"
+version = "0.1.0"
+dependencies = [
+ "svld-language",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

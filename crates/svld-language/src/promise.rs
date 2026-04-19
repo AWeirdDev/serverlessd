@@ -1,5 +1,3 @@
-use std::hint;
-
 use v8::{Local, PinScope, PromiseState};
 
 pub enum Promised<'s> {
@@ -10,13 +8,13 @@ pub enum Promised<'s> {
 impl<'s> Promised<'s> {
     /// Create a new [`Promised`] for better promise state handling.
     ///
-    /// # Safety
-    /// The promise state **MUST NOT** be pending.
-    pub fn new(scope: &PinScope<'s, '_>, promise: Local<'s, v8::Promise>) -> Self {
+    /// Returns
+    /// `Some(Promised)`. `None` if still pending.
+    pub fn new(scope: &PinScope<'s, '_>, promise: Local<'s, v8::Promise>) -> Option<Self> {
         match promise.state() {
-            PromiseState::Fulfilled => Self::Resolved(promise.result(scope)),
-            PromiseState::Rejected => Self::Rejected(promise.result(scope)),
-            PromiseState::Pending => unsafe { hint::unreachable_unchecked() },
+            PromiseState::Fulfilled => Some(Self::Resolved(promise.result(scope))),
+            PromiseState::Rejected => Some(Self::Rejected(promise.result(scope))),
+            PromiseState::Pending => None,
         }
     }
 }

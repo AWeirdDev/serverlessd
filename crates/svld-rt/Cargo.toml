@@ -19,3 +19,4 @@ bytes = "1.11.1"
 # custom deps
 svld-language = { path = "../svld-language" }
 svld-blocks = { path = "../svld-blocks" }
+svld-types = { path = "../svld-types" }

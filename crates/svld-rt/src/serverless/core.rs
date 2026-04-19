@@ -60,23 +60,6 @@ impl Serverless {
         Self::new(1, 1)
     }
 
-    // PPP
-    // /// Starts the serverless runtime.
-    // #[inline]
-    // #[must_use]
-    // pub fn start(self, addr: SocketAddr, secret: String) -> (ServerlessHandle, JoinHandle<()>) {
-    //     let (tx, rx) = mpsc::channel(512);
-    //     let handle = task::spawn(serverless_task(
-    //         self,
-    //         rx,
-    //         addr,
-    //         ServerlessHandle::new(tx.clone()),
-    //         secret,
-    //     ));
-
-    //     (ServerlessHandle::new(tx), handle)
-    // }
-
     /// Gets a clone of the shared reference from [`v8`].
     #[inline(always)]
     pub fn get_platform(&self) -> SharedRef<Platform> {

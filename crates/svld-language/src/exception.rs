@@ -1,6 +1,5 @@
 use v8::{HandleScope, Local, PinScope, PinnedRef, TryCatch};
 
-#[derive(Debug)]
 pub struct ExceptionDetails {
     pub name: String,
     pub stack: String,
@@ -9,6 +8,10 @@ pub struct ExceptionDetails {
 
 impl ExceptionDetails {
     pub fn from_exception(scope: &PinScope, exc: v8::Local<v8::Value>) -> Option<Self> {
+        if !exc.is_object() {
+            return None;
+        }
+
         let exc = exc.cast::<v8::Object>();
         let name = exc
             .get(scope, v8::String::new(scope, "name")?.cast())?
@@ -83,6 +86,12 @@ impl ThrowException {
                 bind_to_v8_err!(message: message, exc: v8::Exception::type_error)
             }
         }
+    }
+}
+
+impl std::fmt::Debug for ExceptionDetails {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.stack)
     }
 }
 

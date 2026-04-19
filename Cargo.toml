@@ -1,6 +1,6 @@
 [package]
 name = "serverlessd"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2024"
 
 [dependencies]
@@ -35,4 +35,5 @@ members = [
     # "crates/svld-readable-stream",
     "crates/svld-blocks",
     "crates/svld-rt",
+    "crates/svld-types",
 ]

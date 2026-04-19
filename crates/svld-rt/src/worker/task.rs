@@ -1,20 +1,17 @@
 use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 
+use svld_types::WorkerError;
 use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
 
 use svld_blocks::{MaybeReplier, ReplierBlock};
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
 
 use crate::{
-    compile, intrinsics, scope_with_context, try_catch,
-    {
-        PodTrigger, PodTx, WorkerState,
-        worker::{
-            MonitorHandle, WorkerTx,
-            error::WorkerError,
-            state::CreateWorkerState,
-            trigger::{WorkerRx, WorkerTrigger},
-        },
+    PodTrigger, PodTx, WorkerState, compile, intrinsics, scope_with_context, try_catch,
+    worker::{
+        MonitorHandle, WorkerTx,
+        state::CreateWorkerState,
+        trigger::{WorkerRx, WorkerTrigger},
     },
 };
 
@@ -109,13 +106,11 @@ pub(super) async fn create_cancel_safe_task(
                 .await;
                 tracing::info!("task stopped/finished, marking worker as sleeping");
 
-                if let Some(state) = state_handle.take() {
-                    tracing::info!("closing state");
-                    close_state(state);
-                }
-
                 match result {
                     Ok(should_restart) => {
+                        // close the state
+                        state_handle.take().map(|st| close_state(st));
+
                         if !should_restart {
                             drop_isolate(isolate_ptr);
                             break;
@@ -123,7 +118,16 @@ pub(super) async fn create_cancel_safe_task(
                     }
                     Err(err) => {
                         tracing::error!("got error on closed handler, {:?}", err);
-                        break;
+
+                        if let Some(st) = state_handle.take() {
+                            st.blocks.with_block::<ReplierBlock, _>(move |block| {
+                                tracing::info!("the received error was sent to the replier.");
+                                if let Some(replier) = block.take_replier() {
+                                    replier.send(Err(err)).ok();
+                                }
+                            });
+                            close_state(st);
+                        }
                     }
                 }
 
@@ -208,8 +212,17 @@ async fn create_task(
             let promise = Local::new(try_catch, promise);
             let promised = Promised::new(try_catch, promise);
 
-            match promised {
+            // still pending, meaning there's await on the top level
+            // we dont support it for now
+            if promised.is_none() {
+                return Err(WorkerError::Serverlessd(
+                    "Got pending promise on top level.".to_string(),
+                ));
+            }
+
+            match unsafe { promised.unwrap_unchecked() } {
                 Promised::Rejected(value) => {
+                    tracing::error!("failed to initialize worker");
                     let exception = ExceptionDetails::from_exception(try_catch, value);
                     return Err(WorkerError::ModuleInitError(exception));
                 }
@@ -496,6 +509,7 @@ async fn init_worker_for_task(
 
         let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
 
+        tracing::info!("instantiating deps...");
         // instantiate imports, etc.
         {
             let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
@@ -504,10 +518,15 @@ async fn init_worker_for_task(
             }
         }
 
+        tracing::info!("evaluating...");
         // instantiate evaluations
+        state.tick_monitoring();
         let Some(promise) = module.evaluate(try_catch) else {
             return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
         };
+        state.tick_monitoring();
+        tracing::info!("evaluated.");
+
         let promise = promise.cast::<Promise>();
 
         (

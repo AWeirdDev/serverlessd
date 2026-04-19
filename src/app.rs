@@ -125,7 +125,6 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
 
     match result {
         Ok(t) => {
-            tracing::info!("got result {}", t);
             res.render(t);
         }
         Err(err) => {

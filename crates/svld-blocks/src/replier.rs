@@ -2,16 +2,12 @@ use std::{cell::OnceCell, ptr::NonNull};
 
 use tokio::sync::oneshot;
 
+use svld_types::WorkerError;
+
 use crate::Block;
 
-#[derive(Debug, thiserror::Error)]
-pub enum ReplyError {
-    #[error("The worker timed out.")]
-    TimedOut,
-}
-
 /// The reply (type) to an HTTP event.
-pub type Reply = Result<String, ReplyError>;
+pub type Reply = Result<String, WorkerError>;
 
 /// The replier to an HTTP event.
 pub type Replier = oneshot::Sender<Reply>;
@@ -55,11 +51,19 @@ impl ReplierBlock {
     /// Sets the replier.
     ///
     /// This operation may only be taken once.
-    #[inline]
+    #[inline(always)]
     pub fn set_replier(&self, replier_ptr: MaybeReplierPtr) {
         self.replier
             .set(unsafe { NonNull::new_unchecked(replier_ptr) })
             .ok();
+    }
+
+    /// Takes the replier out of the block, if exists.
+    #[inline(always)]
+    pub fn take_replier(&self) -> MaybeReplier {
+        self.replier
+            .get()
+            .and_then(|ptr| unsafe { &mut *ptr.as_ptr() }.take())
     }
 }
 
@@ -77,7 +81,7 @@ impl Block for ReplierBlock {
                 let item = unsafe { &mut *replier.as_ptr() };
                 if let Some(item) = item.take() {
                     // if there's nothing, we send blank data
-                    item.send(Err(ReplyError::TimedOut)).ok();
+                    item.send(Err(WorkerError::Timeout)).ok();
                 }
             }
         }

@@ -1,7 +1,33 @@
-{% extends "base.html" %}
+{% extends "base.html" %} {% block title %} Worker Error {% endblock %} {% block
+heading %} Oh, no! {% endblock %} {% block description %}{{ reasoning }}{%
+endblock %} {% block extend %}
 
-{% block title %} Worker Error {% endblock %}
+<a
+    style="
+        background: #0f0807;
+        color: #ffffee;
+        cursor: pointer;
+        text-decoration: none;
+        font-family:
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            &quot;Segoe UI&quot;,
+            Roboto,
+            Oxygen,
+            Ubuntu,
+            Cantarell,
+            &quot;Open Sans&quot;,
+            &quot;Helvetica Neue&quot;,
+            sans-serif;
+        font-size: 16px;
+        padding: 12px 24px;
+        border-radius: 40px;
+        margin-top: 20px;
+    "
+    href=""
+>
+    Retry
+</a>
 
-{% block heading %} Oh, no! {% endblock %}
-
-{% block description %}{{ reasoning }}{% endblock %}
+{% endblock %}

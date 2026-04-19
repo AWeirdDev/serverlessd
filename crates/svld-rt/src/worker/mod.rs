@@ -1,4 +1,3 @@
-mod error;
 mod handle;
 mod monitor;
 mod state;

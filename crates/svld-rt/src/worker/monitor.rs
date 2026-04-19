@@ -225,34 +225,59 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
     let walltime_tick = tokio::time::sleep(Duration::from_secs(10));
     tokio::pin!(walltime_tick);
 
-    tracing::info!("starting to receive!");
-    while let Some(()) = mw.rx.recv().await {
-        tracing::info!("beep boop");
-        if elapsed.as_secs() > 10 {
-            tracing::error!("(per worker, 10s) time's up");
-            break;
-        }
+    let deadline = tokio::time::sleep(Duration::from_millis(100));
+    tokio::pin!(deadline);
 
-        let start = Instant::now();
-
+    loop {
         tokio::select! {
             biased;
 
             _ = &mut walltime_tick => {
-                // oopsie daisy, time's up!
-                tracing::error!("(per worker, 10s) time's up");
+                tracing::warn!("(per worker, 10s) time's up");
                 break;
             }
 
-            _ = mw.rx.recv() => {
-                elapsed += start.elapsed();
-            }
-
-            _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                tracing::error!("(per task, 100ms) time's up");
-                break;
-            }
+            _ = mw.rx.recv() => (),
         };
+
+        let start = Instant::now();
+
+        let message = tokio::select! {
+            biased;
+
+            _ = &mut walltime_tick => {
+                tracing::warn!("(per worker, 10s) time's up");
+                break;
+            }
+
+            _ = &mut deadline => {
+                tracing::warn!("(per task, 100ms) time's up");
+                break;
+            }
+
+            msg = mw.rx.recv() => msg,
+        };
+
+        match message {
+            Some(()) => {
+                tracing::info!("tick monitor");
+                elapsed += start.elapsed();
+
+                let remaining = Duration::from_millis(100).saturating_sub(elapsed);
+
+                deadline.as_mut().reset(Instant::now() + remaining);
+
+                if remaining.is_zero() {
+                    tracing::warn!("(per task, 100ms) time's up");
+                    break;
+                }
+            }
+            None => {
+                // channel closed, worker is gone
+                tracing::info!("worker channel closed");
+                break;
+            }
+        }
     }
 
     halt(&mw);
