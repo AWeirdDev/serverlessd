@@ -1,6 +1,6 @@
 use tokio::sync::oneshot;
 
-use crate::runtime::{
+use crate::{
     WorkerTrigger,
     pod::{PodTrigger, core::Pod, trigger::PodRx},
 };

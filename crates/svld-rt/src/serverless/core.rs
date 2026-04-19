@@ -1,19 +1,10 @@
-use std::net::SocketAddr;
-
 use bytes::Bytes;
-use tokio::{
-    sync::mpsc,
-    task::{self, JoinHandle},
-};
+
 use v8::{Platform, SharedRef};
 
-use crate::runtime::{
+use crate::{
     PodHandle,
-    serverless::{
-        code_store::{CodeStore, CodeStoreError},
-        handle::ServerlessHandle,
-        task::serverless_task,
-    },
+    serverless::code_store::{CodeStore, CodeStoreError},
 };
 
 /// The serverless runtime, as an application.
@@ -27,16 +18,16 @@ use crate::runtime::{
 /// ```
 #[derive(Debug)]
 pub struct Serverless {
-    pub(super) n_threads: usize,
-    pub(super) n_workers: usize,
+    pub n_threads: usize,
+    pub n_workers: usize,
 
-    pub(super) code_store: CodeStore,
+    pub code_store: CodeStore,
 
     // why the fuck is this super fucking big???
     // like, fucking 16 bytes
     // or whatever, if you're happy with it
-    pub(super) platform: SharedRef<Platform>,
-    pub(super) pods: Vec<PodHandle>,
+    pub platform: SharedRef<Platform>,
+    pub pods: Vec<PodHandle>,
 }
 
 impl Serverless {
@@ -69,21 +60,22 @@ impl Serverless {
         Self::new(1, 1)
     }
 
-    /// Starts the serverless runtime.
-    #[inline]
-    #[must_use]
-    pub fn start(self, addr: SocketAddr, secret: String) -> (ServerlessHandle, JoinHandle<()>) {
-        let (tx, rx) = mpsc::channel(512);
-        let handle = task::spawn(serverless_task(
-            self,
-            rx,
-            addr,
-            ServerlessHandle::new(tx.clone()),
-            secret,
-        ));
+    // PPP
+    // /// Starts the serverless runtime.
+    // #[inline]
+    // #[must_use]
+    // pub fn start(self, addr: SocketAddr, secret: String) -> (ServerlessHandle, JoinHandle<()>) {
+    //     let (tx, rx) = mpsc::channel(512);
+    //     let handle = task::spawn(serverless_task(
+    //         self,
+    //         rx,
+    //         addr,
+    //         ServerlessHandle::new(tx.clone()),
+    //         secret,
+    //     ));
 
-        (ServerlessHandle::new(tx), handle)
-    }
+    //     (ServerlessHandle::new(tx), handle)
+    // }
 
     /// Gets a clone of the shared reference from [`v8`].
     #[inline(always)]
@@ -96,7 +88,7 @@ impl Serverless {
     /// # Returns
     /// `Some(((pod_handle, monitor_handke), (pod_id, pod_worker_id)))` if found.
     #[inline]
-    pub(super) async fn find_vacancy_and_warmup(&self) -> Option<(PodHandle, usize, usize)> {
+    pub async fn find_vacancy_and_warmup(&self) -> Option<(PodHandle, usize, usize)> {
         for (pod_id, pod) in self.pods.iter().enumerate() {
             if pod.has_vacancies().await {
                 tracing::info!("found pod {} has a vacancy!", pod_id);
@@ -110,18 +102,18 @@ impl Serverless {
     }
 
     #[inline(always)]
-    pub(super) fn get_pod(&self, id: usize) -> Option<&PodHandle> {
+    pub fn get_pod(&self, id: usize) -> Option<&PodHandle> {
         self.pods.get(id)
     }
 
     /// Push a pod handle to the serverless runtime.
     #[inline(always)]
-    pub(super) fn push_pod(&mut self, pod_handle: PodHandle) {
+    pub fn push_pod(&mut self, pod_handle: PodHandle) {
         self.pods.push(pod_handle);
     }
 
     /// Stop all pods.
-    pub(super) async fn kill(&mut self) {
+    pub async fn kill(&mut self) {
         for pod in self.pods.drain(..) {
             if !pod.kill().await {
                 tracing::error!("failed to halt");
@@ -131,7 +123,7 @@ impl Serverless {
 
     /// Stop a pod.
     #[allow(unused)]
-    pub(super) async fn kill_pod(&mut self, id: usize) -> bool {
+    pub async fn kill_pod(&mut self, id: usize) -> bool {
         if let Some(pod) = self.pods.get_mut(id) {
             pod.kill().await
         } else {
@@ -140,7 +132,7 @@ impl Serverless {
     }
 
     #[inline]
-    pub(super) async fn upload_worker_code(
+    pub async fn upload_worker_code(
         &mut self,
         name: String,
         code: Bytes,
@@ -149,7 +141,7 @@ impl Serverless {
     }
 
     #[inline]
-    pub(super) async fn remove_worker_code(&mut self, name: &str) {
+    pub async fn remove_worker_code(&mut self, name: &str) {
         self.code_store.remove_worker_code(name).await;
     }
 }

@@ -1,6 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use crate::runtime::WorkerTrigger;
+use crate::WorkerTrigger;
 
 #[derive(Debug)]
 pub enum PodTrigger {

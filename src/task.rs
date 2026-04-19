@@ -2,15 +2,12 @@ use std::net::SocketAddr;
 
 use tokio::task::JoinHandle;
 
-use crate::runtime::{
-    Pod, WorkerTask,
-    serverless::{
-        app::start_server,
-        core::Serverless,
-        handle::ServerlessHandle,
-        trigger::{CreateWorkerError, ServerlessRx, ServerlessTrigger},
-    },
+use svld_rt::{
+    CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx, ServerlessTrigger,
+    WorkerTask,
 };
+
+use crate::app::start_server;
 
 pub(super) async fn serverless_task(
     mut serverless: Serverless,

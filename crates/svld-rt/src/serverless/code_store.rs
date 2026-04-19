@@ -57,7 +57,7 @@ impl CodeStore {
     }
 
     #[inline(always)]
-    pub(super) async fn upload_worker_code(
+    pub async fn upload_worker_code(
         &self,
         name: String,
         code: Bytes,
@@ -75,13 +75,13 @@ impl CodeStore {
     }
 
     #[inline(always)]
-    pub(super) async fn remove_worker_code(&self, name: &str) {
+    pub async fn remove_worker_code(&self, name: &str) {
         let path = self.check_fs().await.join(format!("{}.js", &name));
         fs::remove_file(path).ok();
     }
 
     #[inline(always)]
-    pub(super) async fn get_worker_code(&self, name: &str) -> Option<String> {
+    pub async fn get_worker_code(&self, name: &str) -> Option<String> {
         let path = self.check_fs().await.join(format!("{}.js", &name));
         tokio::fs::read_to_string(path).await.ok()
     }

@@ -2598,24 +2598,18 @@ dependencies = [
  "dotenvy",
  "hex",
  "jsonwebtoken",
- "once_cell",
  "rand 0.10.1",
- "regex",
- "reqwest",
  "salvo",
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "smallvec",
- "svld-blocks",
- "svld-language",
+ "svld-rt",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
  "uuid",
- "v8",
 ]
 
 [[package]]
@@ -2782,16 +2776,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "svld-readable-stream"
+name = "svld-rt"
 version = "0.1.0"
 dependencies = [
  "bytes",
- "futures-util",
+ "once_cell",
+ "regex",
+ "reqwest",
  "serde",
+ "serde_json",
+ "svld-blocks",
  "svld-language",
  "thiserror 2.0.18",
  "tokio",
- "tokio-stream",
+ "tokio-util",
+ "tracing",
  "v8",
 ]
 
@@ -3046,17 +3045,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
 dependencies = [
  "rustls",
- "tokio",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
-dependencies = [
- "futures-core",
- "pin-project-lite",
  "tokio",
 ]
 
@@ -3331,9 +3319,9 @@ dependencies = [
 
 [[package]]
 name = "v8"
-version = "147.1.0"
+version = "147.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7b40cc5c1de4d30b3d96f9d4ef83683123c4b324e295a213ae7c70e28ccc047"
+checksum = "34ab71899655e8368fa29d66044b4ba011178dc93c65cf0263068432e77e7359"
 dependencies = [
  "bindgen",
  "bitflags",

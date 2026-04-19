@@ -6,8 +6,8 @@ use svld_blocks::{MaybeReplier, ReplierBlock};
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
 
 use crate::{
-    compile, intrinsics,
-    runtime::{
+    compile, intrinsics, scope_with_context, try_catch,
+    {
         PodTrigger, PodTx, WorkerState,
         worker::{
             MonitorHandle, WorkerTx,
@@ -16,7 +16,6 @@ use crate::{
             trigger::{WorkerRx, WorkerTrigger},
         },
     },
-    scope_with_context, try_catch,
 };
 
 /// Unwrap.

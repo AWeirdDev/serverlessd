@@ -2,7 +2,7 @@ use svld_blocks::Replier;
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::runtime::WorkerTask;
+use crate::WorkerTask;
 
 #[derive(Debug)]
 #[allow(unused)]

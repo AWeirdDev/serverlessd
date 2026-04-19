@@ -9,7 +9,7 @@ use tokio_util::task::TaskTracker;
 
 use v8::IsolateHandle;
 
-use crate::runtime::{PodHandle, WorkerTrigger, worker::WorkerTx};
+use crate::{PodHandle, WorkerTrigger, worker::WorkerTx};
 
 pub enum MonitorTrigger {
     Spawn {

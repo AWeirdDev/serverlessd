@@ -9,7 +9,7 @@ use v8::{Global, Local, Object, PromiseResolver};
 
 use svld_language::{ThrowException, throw};
 
-use crate::{intrinsics::response::Response, runtime::WorkerState};
+use crate::{intrinsics::response::Response, worker::WorkerState};
 
 macro_rules! some {
     ($k:expr) => {{

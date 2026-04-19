@@ -10,9 +10,9 @@ use salvo::{
 use serde_json::json;
 use tokio::io;
 
-use crate::runtime::serverless::{
-    app_security::AuthMiddleware, handle::ServerlessHandle, trigger::CreateWorkerError,
-};
+use svld_rt::{CreateWorkerError, ServerlessHandle};
+
+use crate::app_security::AuthMiddleware;
 
 #[derive(Template)]
 #[template(path = "404.html")]

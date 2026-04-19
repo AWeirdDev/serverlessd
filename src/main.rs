@@ -1,7 +1,6 @@
-mod compile;
-mod intrinsics;
-mod macros;
-mod runtime;
+mod app;
+mod app_security;
+mod task;
 
 use std::{
     fs,
@@ -13,8 +12,10 @@ use std::{
 
 use bytes::Bytes;
 use clap::Parser;
+use svld_rt::{Serverless, ServerlessHandle};
+use tokio::sync::mpsc;
 
-use crate::runtime::Serverless;
+use crate::task::serverless_task;
 
 /// Serverless workers management architecture.
 #[derive(clap::Parser)]
@@ -253,7 +254,18 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
     let worker_id = uuid::Uuid::new_v4().to_string();
     let worker_url = format!("http://{}/worker/{}", addr, worker_id);
 
-    let (svl, handle) = serverless.start(addr, secret);
+    let (svl, handle) = {
+        let (tx, rx) = mpsc::channel(512);
+        let handle = tokio::task::spawn(serverless_task(
+            serverless,
+            rx,
+            addr,
+            ServerlessHandle::new(tx.clone()),
+            secret,
+        ));
+
+        (ServerlessHandle::new(tx), handle)
+    };
 
     let res = svl
         .upload_worker(worker_id.to_string(), Bytes::from_owner(source))
@@ -279,7 +291,18 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
 async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr, secret: String) {
     let serverless = Serverless::new(n_workers, n_workers_per_pod);
 
-    let (_svl, handle) = serverless.start(addr, secret);
+    let (_svl, handle) = {
+        let (tx, rx) = mpsc::channel(512);
+        let handle = tokio::task::spawn(serverless_task(
+            serverless,
+            rx,
+            addr,
+            ServerlessHandle::new(tx.clone()),
+            secret,
+        ));
+
+        (ServerlessHandle::new(tx), handle)
+    };
 
     if let Err(e) = handle.await {
         tracing::error!(?e, "error while joining task handle");

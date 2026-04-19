@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::runtime::{PodTrigger, serverless::code_store::CodeStoreError};
+use crate::{PodTrigger, serverless::code_store::CodeStoreError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CreateWorkerError {
@@ -35,5 +35,5 @@ pub enum ServerlessTrigger {
     },
 }
 
-pub(super) type ServerlessTx = mpsc::Sender<ServerlessTrigger>;
-pub(super) type ServerlessRx = mpsc::Receiver<ServerlessTrigger>;
+pub type ServerlessTx = mpsc::Sender<ServerlessTrigger>;
+pub type ServerlessRx = mpsc::Receiver<ServerlessTrigger>;

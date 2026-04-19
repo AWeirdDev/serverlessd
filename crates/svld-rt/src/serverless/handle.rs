@@ -2,7 +2,7 @@ use bytes::Bytes;
 use svld_blocks::Reply;
 use tokio::sync::oneshot;
 
-use crate::runtime::{
+use crate::{
     PodTrigger, WorkerTrigger,
     serverless::{
         code_store::CodeStoreError,
@@ -17,7 +17,7 @@ pub struct ServerlessHandle {
 
 impl ServerlessHandle {
     #[inline(always)]
-    pub(super) fn new(tx: ServerlessTx) -> Self {
+    pub fn new(tx: ServerlessTx) -> Self {
         Self { tx }
     }
 
