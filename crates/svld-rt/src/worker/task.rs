@@ -492,6 +492,10 @@ async fn init_worker_for_task(
                 try_catch,
                 some init intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj)
             );
+
+            // Register ReadableStream on the global object.  The block pointer
+            // was stored in isolate slot 1 during WorkerState::create_injected.
+            svld_readable_stream::register(try_catch, context_global);
         }
 
         let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));

@@ -5,6 +5,7 @@ use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
 use svld_blocks::{Blocks, HttpClientBlock, ReplierBlock};
+use svld_readable_stream::RsBlock;
 use svld_language::ThrowException;
 
 use crate::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx};
@@ -80,13 +81,27 @@ impl WorkerState {
                 Blocks::new()
                     .add_block(ReplierBlock::new())
                     .add_block(HttpClientBlock::new())
+                    .add_block(RsBlock::new())
             },
         });
 
         let item = Arc::clone(&slf);
 
         unsafe {
-            item.get_isolate().set_data(0, slf.into_raw());
+            let isolate = item.get_isolate();
+
+            // Compute the ReadableStreamBlock pointer while slf is still alive.
+            // The block lives inside the Arc-allocated WorkerState, so this
+            // pointer is valid for the lifetime of the Arc (i.e. the isolate).
+            let rs_block_ptr = slf
+                .blocks
+                .with_block_unchecked::<RsBlock, _>(|b| b as *const RsBlock as *mut std::ffi::c_void);
+
+            // Slot 0: consume slf into a raw pointer (existing convention).
+            isolate.set_data(0, slf.into_raw());
+
+            // Slot 1: ReadableStreamBlock pointer for the JS constructor.
+            isolate.set_data(1, rs_block_ptr);
         };
 
         Some(item)
