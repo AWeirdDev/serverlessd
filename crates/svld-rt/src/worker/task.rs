@@ -496,6 +496,7 @@ async fn init_worker_for_task(
         try_catch!(scope: scope, let try_catch);
 
         let intrinsics_obj = unwrap!(try_catch, some init intrinsics::build_intrinsics(try_catch));
+        try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
 
         // we're gonna put them in the global
         {
@@ -552,11 +553,19 @@ async fn init_worker_for_task(
 /// Gracefully closes the worker state, releasing memory.
 #[inline]
 fn close_state(state: Arc<WorkerState>) {
+    // first the worker state
     let isolate = unsafe { &mut *state.isolate.as_ptr() };
     drop(state);
 
     let state2 = WorkerState::open_from_isolate(isolate);
     state2.close();
+
+    // then the global intrinsics
+    let data = isolate.get_data(1);
+    if !data.is_null() {
+        let _ =
+            unsafe { Global::from_raw(isolate, NonNull::new_unchecked(data as *mut v8::Value)) };
+    }
 
     // at this point, state & state2 gets dropped
     // memory gets freed (hopefully, PLEASE)

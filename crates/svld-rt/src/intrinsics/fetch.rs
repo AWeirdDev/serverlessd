@@ -9,7 +9,7 @@ use v8::{Global, Local, Object, PromiseResolver};
 
 use svld_language::{ThrowException, throw};
 
-use crate::{intrinsics::response::Response, worker::WorkerState};
+use crate::worker::WorkerState;
 
 macro_rules! some {
     ($k:expr) => {{
@@ -176,19 +176,10 @@ pub fn fetch(
             let result = rq.send().await;
 
             match result {
-                Ok(resp) => {
+                Ok(_resp) => {
                     state2.schedule_resolution_and_tick(
                         gresolver,
                         Ok(Box::new(move |scope| {
-                            let Some(jsresp) = Response::builder(scope)
-                                .type_("basic")
-                                .status(resp.status().as_u16())
-                                .url(resp.url().as_str())
-                                .build()
-                            else {
-                                return throw(scope, ThrowException::error("unknown error"));
-                            };
-
                             // .headers — a Headers-like object { get(name), entries(), ... }
 
                             // Store raw body bytes in an ArrayBuffer
@@ -215,7 +206,7 @@ pub fn fetch(
                             // let blob_fn = make_body_method(scope, ab_clone4, BodyKind::Blob);
                             // set_prop(scope, obj, "blob", blob_fn.into());
 
-                            Local::new(scope, jsresp.cast())
+                            Local::new(scope, v8::undefined(scope).cast())
                         })),
                     );
                 }
