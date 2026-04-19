@@ -60,11 +60,6 @@ pub fn fetch(
     tracing::info!("fetch()");
     let state = WorkerState::get_from_isolate(scope);
 
-    let client_extension = unsafe { state.extensions.get_block_unchecked::<HttpClientBlock>() };
-
-    client_extension.add_client();
-    let client = unsafe { client_extension.get_client().unwrap_unchecked() };
-
     if args.length() == 0 {
         let exc = throw(
             scope,
@@ -102,7 +97,14 @@ pub fn fetch(
         Method::GET
     };
 
-    let mut rq = client.request(method, url);
+    let mut rq = unsafe {
+        state
+            .blocks
+            .with_block_unchecked::<HttpClientBlock, _>(move |block| {
+                block.add_client();
+                block.get_client().unwrap().request(method, url)
+            })
+    };
 
     // we gotta parse some fucking options now
     if has_options {

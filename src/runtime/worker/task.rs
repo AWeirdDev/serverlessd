@@ -342,8 +342,13 @@ async fn create_task(
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
-                    let replier_shell = unsafe { state.get_block_unchecked::<ReplierBlock>() };
-                    replier_shell.set_replier(replier_ptr);
+                    unsafe {
+                        state
+                            .blocks
+                            .with_block_unchecked::<ReplierBlock, _>(move |shell| {
+                                shell.set_replier(replier_ptr);
+                            })
+                    };
 
                     // next: call
                     state.tick_monitoring();

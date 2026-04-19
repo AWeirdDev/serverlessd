@@ -50,7 +50,8 @@ impl Response {
         }
     }
 
-    fn json(
+    /// `json()` static method.
+    fn static_json(
         scope: &mut v8::PinScope,
         args: v8::FunctionCallbackArguments,
         mut rv: v8::ReturnValue,
@@ -91,6 +92,13 @@ impl Response {
                 ));
             }
         }
+    }
+
+    fn instance_json(
+        scope: &mut v8::PinScope,
+        args: v8::FunctionCallbackArguments,
+        mut rv: v8::ReturnValue,
+    ) {
     }
 }
 

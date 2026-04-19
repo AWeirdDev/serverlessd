@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, cell::RefCell};
 
 use typeid::ConstTypeId;
 
@@ -10,9 +10,11 @@ type BlockMeta = (ConstTypeId, Box<dyn Any>, fn(Box<dyn Any>) -> ());
 ///
 /// # Time complexity
 /// Searching is `O(N)`, but it's fine because the number of blocks should be small.
+///
+/// # Safety
 #[repr(transparent)]
 pub struct Blocks {
-    blocks: Vec<BlockMeta>,
+    blocks: RefCell<Vec<BlockMeta>>,
 }
 
 impl Blocks {
@@ -21,47 +23,57 @@ impl Blocks {
     /// It's **strongly** recommended that you should assign `N` to indicate the
     /// amount of capacity to allocate.
     #[inline(always)]
-    pub fn new<const N: usize>() -> Self {
+    pub fn new() -> Self {
         Self {
-            blocks: Vec::with_capacity(N),
+            blocks: RefCell::new(Vec::with_capacity(4)), // simple constant base
         }
     }
 
     /// Pushes an block.
     #[inline(always)]
-    pub fn with_block<T: Block + 'static>(mut self, block: T) -> Self {
-        self.blocks
-            .push((T::TYPE, Box::new(block) as _, T::drop_block_data));
+    pub fn add_block<T: Block + 'static>(self, block: T) -> Self {
+        {
+            let mut blocks = self.blocks.borrow_mut();
+            blocks.push((T::TYPE, Box::new(block) as _, T::drop_block_data));
+        }
+
         self
     }
 
-    /// Gets the block of type `T`.
+    /// Runs callback on the block of type `T`.
     ///
     /// # Returns
-    /// Some referenced value (`&T`). If any of the following
-    /// is not satisfied, `None` is returned:
-    ///
+    /// If any of the following is not satisfied, `None` is returned:
     /// - A value of type `T` is not found.
+    /// - Currently borrowed mutably.
+    ///
+    /// # Safety
+    /// `!Sync`.
     #[inline(always)]
-    pub fn get_block<T: 'static>(&self) -> Option<&T> {
+    pub fn with_block<T: 'static, R>(&self, callback: impl FnOnce(&T) -> R) -> Option<R> {
         let id = ConstTypeId::of::<T>();
 
-        self.blocks
+        let Ok(blocks) = self.blocks.try_borrow() else {
+            return None;
+        };
+        blocks
             .iter()
             .find(|item| item.0 == id)
-            .and_then(|item| item.1.downcast_ref())
+            .and_then(|item| item.1.downcast_ref::<T>())
+            .map(|item| callback(item))
     }
 
-    /// Gets the block of type `T` without checking availability.
+    /// Runs callback on the block of type `T` without checking availability.
     #[inline(always)]
-    pub unsafe fn get_block_unchecked<T: 'static>(&self) -> &T {
-        unsafe { self.get_block::<T>().unwrap_unchecked() }
+    pub unsafe fn with_block_unchecked<T: 'static, R>(&self, callback: impl FnOnce(&T) -> R) -> R {
+        unsafe { self.with_block::<T, R>(callback).unwrap_unchecked() }
     }
 }
 
 impl Drop for Blocks {
     fn drop(&mut self) {
-        self.blocks.drain(..).for_each(|item| {
+        let blocks = self.blocks.get_mut();
+        blocks.drain(..).for_each(|item| {
             item.2(item.1);
         });
     }

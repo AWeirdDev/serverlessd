@@ -26,7 +26,7 @@ pub struct WorkerState {
     pub isolate: NonNull<OwnedIsolate>,
     pub platform: SharedRef<Platform>,
     pub monitoring: Monitoring,
-    pub extensions: Blocks,
+    pub blocks: Blocks,
 }
 
 /// Parameters for creating a worker state.
@@ -76,10 +76,10 @@ impl WorkerState {
             monitoring: monitor_handle
                 .start_monitoring(isolate_handle, worker_id, worker_tx)
                 .await?,
-            extensions: {
-                Blocks::new::<2>() // IMPORTANT: put the exact amount here!
-                    .with_block(ReplierBlock::new())
-                    .with_block(HttpClientBlock::new())
+            blocks: {
+                Blocks::new()
+                    .add_block(ReplierBlock::new())
+                    .add_block(HttpClientBlock::new())
             },
         });
 
@@ -176,16 +176,5 @@ impl WorkerState {
     /// *(event loop)*
     pub async fn wait_event_loop_tick(&self) {
         self.event_loop_tick.notified().await
-    }
-
-    /// Get extension data of type `T`.
-    #[inline(always)]
-    pub fn get_block<T: Sized + 'static>(&self) -> Option<&T> {
-        self.extensions.get_block()
-    }
-
-    #[inline(always)]
-    pub unsafe fn get_block_unchecked<T: Sized + 'static>(&self) -> &T {
-        unsafe { self.get_block::<T>().unwrap_unchecked() }
     }
 }

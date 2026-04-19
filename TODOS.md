@@ -1,9 +1,9 @@
-- [x] add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
-- [x] URGENT: FIX LOGIC FOR CHECKING VACANCIES AND ADDING WORKERS, SOMETHING ISN'T RIGHT. I think I saw that you can add MORE workers than the capacity. fuck.
+- [ ] worker custom environment variables
 - [ ] fetch
 - [ ] `ReadableStream` API
-- [ ] extensions
+- [x] add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
+- [x] URGENT: FIX LOGIC FOR CHECKING VACANCIES AND ADDING WORKERS, SOMETHING ISN'T RIGHT. I think I saw that you can add MORE workers than the capacity. fuck.
+- [x] blocks (previously "extensions")
 - [x] time advancement
-- [ ] worker custom environment variables
-- [ ] better error codes at http level and exception handling
-- [ ] URGENT: WORKER GETS REMOVED COMPLETELY AND DOESN'T COUNT AS "SLEEPING," SHOULD ADD STATES FOR WORKERS INSTEAD.
+- [x] better error codes at http level and exception handling
+- [x] URGENT: WORKER GETS REMOVED COMPLETELY AND DOESN'T COUNT AS "SLEEPING," SHOULD ADD STATES FOR WORKERS INSTEAD.
