@@ -195,58 +195,66 @@ async fn create_task(
             }
         }
     };
-    let isolate = unsafe { state.get_isolate() };
 
-    scope_with_context!(
-        isolate: isolate,
-        let &mut scope,
-        let context
-    );
-    try_catch!(scope: scope, let try_catch);
+    let (_entrypoint, mut entrypoint_fetch) = {
+        let isolate = unsafe { state.get_isolate() };
 
-    let module = Local::new(try_catch, module);
-    {
-        let promise = Local::new(try_catch, promise);
-        let promised = Promised::new(try_catch, promise);
+        scope_with_context!(
+            isolate: isolate,
+            let &mut scope,
+            let context
+        );
+        try_catch!(scope: scope, let try_catch);
 
-        match promised {
-            Promised::Rejected(value) => {
-                let exception = ExceptionDetails::from_exception(try_catch, value);
-                return Err(WorkerError::ModuleInitError(exception));
-            }
-            Promised::Resolved(_) => {
-                tracing::info!("worker env initialized");
+        let module = Local::new(try_catch, module);
+        {
+            let promise = Local::new(try_catch, promise);
+            let promised = Promised::new(try_catch, promise);
+
+            match promised {
+                Promised::Rejected(value) => {
+                    let exception = ExceptionDetails::from_exception(try_catch, value);
+                    return Err(WorkerError::ModuleInitError(exception));
+                }
+                Promised::Resolved(_) => {
+                    tracing::info!("worker env initialized");
+                }
             }
         }
-    }
 
-    let namespace = module.get_module_namespace().cast::<v8::Object>();
-    let entrypoint = unwrap!(
-        try_catch,
-        some init namespace.get(try_catch, {
-            unwrap!(try_catch, some init v8::String::new(try_catch, "default")).cast()
-        })
-    );
-
-    if !entrypoint.is_object() || entrypoint.is_null_or_undefined() {
-        tracing::error!("error while getting worker entrypoint");
-        return Err(WorkerError::NoEntrypoint);
-    }
-
-    let entrypoint = entrypoint.cast::<v8::Object>();
-    let entrypoint_fetch = {
-        let item = unwrap!(
+        let namespace = module.get_module_namespace().cast::<v8::Object>();
+        let entrypoint = unwrap!(
             try_catch,
-            some init entrypoint.get(try_catch, {
-                unwrap!(try_catch, some init v8::String::new(try_catch, "fetch")).cast()
+            some init namespace.get(try_catch, {
+                unwrap!(try_catch, some init v8::String::new(try_catch, "default")).cast()
             })
         );
 
-        if item.is_function() {
-            Some(item.cast::<v8::Function>())
-        } else {
-            None
+        if !entrypoint.is_object() || entrypoint.is_null_or_undefined() {
+            tracing::error!("error while getting worker entrypoint");
+            return Err(WorkerError::NoEntrypoint);
         }
+
+        let entrypoint = entrypoint.cast::<v8::Object>();
+        let entrypoint_fetch = {
+            let item = unwrap!(
+                try_catch,
+                some init entrypoint.get(try_catch, {
+                    unwrap!(try_catch, some init v8::String::new(try_catch, "fetch")).cast()
+                })
+            );
+
+            if item.is_function() {
+                Some(item.cast::<v8::Function>())
+            } else {
+                None
+            }
+        };
+
+        (
+            Global::new(try_catch, entrypoint),
+            entrypoint_fetch.map(|item| Global::new(try_catch, item)),
+        )
     };
 
     tracing::info!("worker now started, waiting for events");
@@ -260,6 +268,14 @@ async fn create_task(
 
         // event loop
         {
+            let isolate = unsafe { state.get_isolate() };
+            scope_with_context!(
+                isolate: isolate,
+                let &mut scope,
+                let context
+            );
+            try_catch!(scope: scope, let try_catch);
+
             let mut resolutions = state.pending_resolutions.borrow_mut();
             while let Some((gresolver, result)) = resolutions.pop_front() {
                 let resolver = Local::new(try_catch, gresolver);
@@ -312,7 +328,17 @@ async fn create_task(
             WorkerTrigger::Http { reply } => {
                 tracing::info!("worker received http");
 
-                if let Some(fetch) = entrypoint_fetch {
+                if let Some(gfetch) = entrypoint_fetch.take() {
+                    let isolate = unsafe { state.get_isolate() };
+                    scope_with_context!(
+                        isolate: isolate,
+                        let &mut scope,
+                        let context
+                    );
+                    try_catch!(scope: scope, let try_catch);
+
+                    let fetch = Local::new(try_catch, gfetch);
+
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
