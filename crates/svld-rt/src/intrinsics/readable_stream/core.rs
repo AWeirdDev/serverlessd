@@ -23,6 +23,21 @@ use crate::{
 pub struct JsReadableStream;
 
 impl JsReadableStream {
+    /// Creates a ReadableStream pre-loaded with a single chunk and immediately closed.
+    pub fn new_with_chunk<'s>(
+        scope: &PinScope<'s, '_>,
+        rs_constructor: Local<'s, v8::Function>,
+        chunk: Local<'s, v8::Value>,
+    ) -> Option<Local<'s, v8::Object>> {
+        let stream = rs_constructor.new_instance(scope, &[])?;
+        let ext = stream.get_internal_field(scope, 0)?.cast::<External>();
+        let state_ptr = ext.value() as *mut ReadableStreamState;
+        let state = unsafe { &mut *state_ptr };
+        state.enqueue(Global::new(scope, chunk));
+        state.close_requested = true;
+        Some(stream)
+    }
+
     pub fn get_new_fn<'s>(scope: &mut PinScope<'s, '_>) -> Option<Local<'s, Value>> {
         let func_tmpl = v8::FunctionTemplate::new(scope, Self::js_constructor);
 

@@ -11,6 +11,8 @@ use svld_language::{ThrowException, throw};
 
 use crate::worker::WorkerState;
 
+use super::response::JsResponse;
+
 macro_rules! some {
     ($k:expr) => {{
         let Some(m) = $k else {
@@ -173,55 +175,71 @@ pub fn fetch(
     let fut = {
         let state2 = state.clone();
         state.monitored_future(async move {
-            let result = rq.send().await;
-
-            match result {
-                Ok(_resp) => {
-                    state2.schedule_resolution_and_tick(
-                        gresolver,
-                        Ok(Box::new(move |scope| {
-                            // .headers — a Headers-like object { get(name), entries(), ... }
-
-                            // Store raw body bytes in an ArrayBuffer
-                            // let body_ab = bytes_to_array_buffer(scope, &resp.body);
-
-                            // .arrayBuffer() → Promise<ArrayBuffer>
-                            // let ab_clone = v8::Global::new(scope, body_ab);
-                            // let ab_fn =
-                            //     make_body_method(scope, ab_clone, BodyKind::ArrayBuffer);
-                            // set_prop(scope, obj, "arrayBuffer", ab_fn.into());
-
-                            // .text() → Promise<string>
-                            // let ab_clone2 = v8::Global::new(scope, body_ab);
-                            // let text_fn = make_body_method(scope, ab_clone2, BodyKind::Text);
-                            // set_prop(scope, obj, "text", text_fn.into());
-
-                            // .json() → Promise<any>
-                            // let ab_clone3 = v8::Global::new(scope, body_ab);
-                            // let json_fn = make_body_method(scope, ab_clone3, BodyKind::Json);
-                            // set_prop(scope, obj, "json", json_fn.into());
-
-                            // .blob() — returns a minimal object with {size, type, arrayBuffer()}
-                            // let ab_clone4 = v8::Global::new(scope, body_ab);
-                            // let blob_fn = make_body_method(scope, ab_clone4, BodyKind::Blob);
-                            // set_prop(scope, obj, "blob", blob_fn.into());
-
-                            Local::new(scope, v8::undefined(scope).cast())
-                        })),
-                    );
-                }
-
+            let resp = match rq.send().await {
+                Ok(r) => r,
                 Err(err) => {
-                    let details = err.to_string();
                     state2.schedule_resolution_and_tick(
                         gresolver,
-                        Err(ThrowException::Error(details)),
+                        Err(ThrowException::Error(err.to_string())),
                     );
+                    return;
                 }
-            }
+            };
+
+            // Capture metadata before consuming the response body
+            let status = resp.status().as_u16();
+            let final_url = resp.url().to_string();
+            let resp_headers: Vec<(String, String)> = resp
+                .headers()
+                .iter()
+                .filter_map(|(k, v)| Some((k.to_string(), v.to_str().ok()?.to_string())))
+                .collect();
+
+            let bytes = match resp.bytes().await {
+                Ok(b) => b,
+                Err(err) => {
+                    state2.schedule_resolution_and_tick(
+                        gresolver,
+                        Err(ThrowException::Error(err.to_string())),
+                    );
+                    return;
+                }
+            };
+
+            state2.schedule_resolution_and_tick(
+                gresolver,
+                Ok(Box::new(move |scope| {
+                    build_fetch_response(scope, status, &final_url, &resp_headers, &bytes)
+                        .map(|o| o.cast())
+                        .unwrap_or_else(|| v8::undefined(scope).cast())
+                })),
+            );
         })
     };
     state.tasks.spawn_local(fut);
 
     rv.set(resolver.cast());
+}
+
+fn build_fetch_response<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    status: u16,
+    url: &str,
+    headers: &[(String, String)],
+    bytes: &[u8],
+) -> Option<Local<'s, v8::Object>> {
+    let headers_obj = v8::Object::new(scope);
+    for (k, v) in headers {
+        let kv = v8::String::new(scope, k)?.cast::<v8::Value>();
+        let vv = v8::String::new(scope, v)?.cast::<v8::Value>();
+        headers_obj.set(scope, kv, vv);
+    }
+
+    JsResponse::builder(scope)
+        .status(scope, status)?
+        .url(scope, url)?
+        .type_(scope, "basic")?
+        .headers(scope, headers_obj)?
+        .body_bytes(scope, bytes)?
+        .build(scope)
 }
