@@ -30,7 +30,7 @@ impl Pod {
             vacancies: HashSet::with_capacity(n_workers),
             tasks: TaskTracker::new(),
             monitor: {
-                let m = Monitor::new(pod_handle.clone());
+                let m = Monitor::new();
                 m.start()
             },
         };

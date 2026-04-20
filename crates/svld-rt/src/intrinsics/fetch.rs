@@ -174,7 +174,7 @@ pub fn fetch(
     let gresolver = Global::new(scope, resolver);
     let fut = {
         let state2 = state.clone();
-        state.monitored_future(async move {
+        state.tasks.spawn_local(async move {
             let resp = match rq.send().await {
                 Ok(r) => r,
                 Err(err) => {
@@ -186,7 +186,7 @@ pub fn fetch(
                 }
             };
 
-            // Capture metadata before consuming the response body
+            // capture metadata before consuming the response body
             let status = resp.status().as_u16();
             let final_url = resp.url().to_string();
             let resp_headers: Vec<(String, String)> = resp
@@ -198,6 +198,7 @@ pub fn fetch(
             let bytes = match resp.bytes().await {
                 Ok(b) => b,
                 Err(err) => {
+                    tracing::error!("errored on fetch(), ticking event loop");
                     state2.schedule_resolution_and_tick(
                         gresolver,
                         Err(ThrowException::Error(err.to_string())),
@@ -206,6 +207,7 @@ pub fn fetch(
                 }
             };
 
+            tracing::info!("ok on fetch(), ticking event loop");
             state2.schedule_resolution_and_tick(
                 gresolver,
                 Ok(Box::new(move |scope| {
@@ -228,6 +230,7 @@ fn build_fetch_response<'s>(
     headers: &[(String, String)],
     bytes: &[u8],
 ) -> Option<Local<'s, v8::Object>> {
+    tracing::info!("building Response");
     let headers_obj = v8::Object::new(scope);
     for (k, v) in headers {
         let kv = v8::String::new(scope, k)?.cast::<v8::Value>();

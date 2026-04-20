@@ -1,7 +1,10 @@
 use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 
 use svld_types::WorkerError;
-use v8::{External, Function, Global, Local, Module, OwnedIsolate, Platform, Promise, SharedRef};
+use v8::{
+    External, Function, GetPropertyNamesArgs, Global, Local, Module, OwnedIsolate, Platform,
+    Promise, SharedRef,
+};
 
 use svld_blocks::{MaybeReplier, ReplierBlock};
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
@@ -120,6 +123,7 @@ pub(super) async fn create_cancel_safe_task(
                         // close the state
                         state_handle.take().map(|st| close_state(st));
 
+                        // chances are pretty small
                         if !should_restart {
                             drop_isolate(isolate_ptr);
                             break;
@@ -143,7 +147,7 @@ pub(super) async fn create_cancel_safe_task(
                 pod_tx
                     .send(PodTrigger::MarkWorkerAsSleeping { id })
                     .await
-                    .ok();
+                    .unwrap();
             }
 
             WorkerTrigger::Kill { token } => {
@@ -286,7 +290,9 @@ async fn create_task(
         tracing::info!("tick event!");
 
         // event loop
-        {
+        let Some(maybe_event) = maybe_event_if_trigger else {
+            tracing::info!("resolving event loop");
+
             let isolate = unsafe { state.get_isolate() };
             scope_with_context!(
                 isolate: isolate,
@@ -311,14 +317,16 @@ async fn create_task(
                     }
                 }
             }
+
+            tracing::info!("ticking");
             state.tick_monitoring();
             try_catch.perform_microtask_checkpoint();
             state.tick_monitoring();
-        }
+            tracing::info!("finished ticky tick!");
 
-        let Some(maybe_event) = maybe_event_if_trigger else {
             continue;
         };
+
         let Some(event) = maybe_event else {
             return Ok(false);
         };
@@ -326,7 +334,9 @@ async fn create_task(
         match event {
             // ===== bad events =====
             WorkerTrigger::StartTask { .. } => {
-                tracing::error!("unwanted 'start task' event while in worker loop");
+                tracing::error!(
+                    "unwanted 'start task' event while in worker loop; should be a bug"
+                );
                 break;
             }
             WorkerTrigger::Kill { token } => {
@@ -341,7 +351,7 @@ async fn create_task(
             WorkerTrigger::HaltTask => {
                 // clean up
                 tracing::warn!("worker halting");
-                break;
+                return Ok(true);
             }
 
             WorkerTrigger::Http { reply } => {
@@ -445,16 +455,7 @@ async fn create_task(
                     state.tick_monitoring();
                 }
             }
-
-            WorkerTrigger::Refresh => {
-                // before this session dies out, we need to remove the global first
-                // let global = context.global(try_catch);
-
-                return Ok(true);
-            }
         }
-
-        // kkkk
     }
 
     Ok(false)
@@ -562,6 +563,8 @@ async fn init_worker_for_task(
 }
 
 /// Gracefully closes the worker state, releasing memory.
+///
+/// Additionally, this also removes globals.
 #[inline]
 fn close_state(state: Arc<WorkerState>) {
     // first the worker state
@@ -576,6 +579,22 @@ fn close_state(state: Arc<WorkerState>) {
     if !data.is_null() {
         let _ =
             unsafe { Global::from_raw(isolate, NonNull::new_unchecked(data as *mut v8::Value)) };
+    }
+
+    // then all the globals, we gotta erase em
+    scope_with_context!(
+        isolate: isolate,
+        let &mut scope,
+        let context
+    );
+    let global = context.global(scope);
+    let own_props = global
+        .get_own_property_names(scope, GetPropertyNamesArgs::default())
+        .unwrap();
+
+    for i in 0..own_props.length() {
+        let key = own_props.get_index(scope, i).unwrap();
+        global.delete(scope, key);
     }
 
     // at this point, state & state2 gets dropped

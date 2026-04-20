@@ -14,16 +14,16 @@ pub enum WorkerTrigger {
     },
 
     /// Stop a task from running.
+    ///
+    /// # Behavior
+    /// This now refreshes the isolate instead.
     HaltTask,
 
     Http {
         reply: Replier,
     },
 
-    /// Request an isolate refresh for later use.
-    Refresh,
-
-    /// Kill the isolate completely.
+    /// Kill the isolate & worker completely.
     ///
     /// # Warning
     /// You may not kill the worker if it's not in

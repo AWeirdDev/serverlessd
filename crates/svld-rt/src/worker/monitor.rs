@@ -9,7 +9,7 @@ use tokio_util::task::TaskTracker;
 
 use v8::IsolateHandle;
 
-use crate::{PodHandle, WorkerTrigger, worker::WorkerTx};
+use crate::{WorkerTrigger, worker::WorkerTx};
 
 pub enum MonitorTrigger {
     Spawn {
@@ -28,17 +28,15 @@ pub struct Monitor {
     // SAFETY: we don't need to get a stable memory address
     // # of pod workers will not increase
     tracker: TaskTracker,
-    pod_handle: PodHandle,
 }
 
 impl Monitor {
     /// Creates a worker wall time monitor that performs
     /// monitoring on a different thread to ensure true parallelism.
     #[inline]
-    pub fn new(pod_handle: PodHandle) -> Self {
+    pub fn new() -> Self {
         Self {
             tracker: TaskTracker::new(),
-            pod_handle,
         }
     }
 
@@ -74,8 +72,7 @@ impl Monitor {
         let (tx, rx) = mpsc::unbounded_channel();
 
         let mw = MonitoredWorker::new(isolate_handle, worker_tx, rx);
-        self.tracker
-            .spawn_local(monitor_worker_task(mw, self.pod_handle.clone(), worker_id));
+        self.tracker.spawn_local(monitor_worker_task(mw, worker_id));
 
         Monitoring::new(tx)
     }
@@ -154,29 +151,6 @@ async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
     }
 }
 
-pub struct MonitoredFuture<F> {
-    inner: F,
-    tx: mpsc::UnboundedSender<()>,
-}
-
-impl<F: Future> Future for MonitoredFuture<F> {
-    type Output = F::Output;
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        let inner = unsafe { std::pin::Pin::new_unchecked(&mut this.inner) };
-
-        this.tx.send(()).ok();
-        let result = inner.poll(cx);
-        this.tx.send(()).ok();
-
-        result
-    }
-}
-
 #[repr(transparent)]
 pub struct Monitoring {
     tx: mpsc::UnboundedSender<()>,
@@ -206,18 +180,9 @@ impl Monitoring {
     pub fn tick(&self) {
         self.tx.send(()).ok();
     }
-
-    /// Create a monitored future. Ticking is done between task polls.
-    #[inline(always)]
-    pub fn monitored_future<F: Future>(&self, f: F) -> MonitoredFuture<F> {
-        MonitoredFuture {
-            inner: f,
-            tx: self.tx.clone(),
-        }
-    }
 }
 
-async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id: usize) {
+async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
     tracing::info!("monitoring worker {}", worker_id);
 
     let mut elapsed = Duration::default();
@@ -240,6 +205,8 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
             _ = mw.rx.recv() => (),
         };
 
+        tracing::info!("WAITING SECOND TICK...");
+
         let start = Instant::now();
 
         let message = tokio::select! {
@@ -260,7 +227,7 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
 
         match message {
             Some(()) => {
-                tracing::info!("tick monitor");
+                tracing::info!("FULLFILLED TICK");
                 elapsed += start.elapsed();
 
                 let remaining = Duration::from_millis(100).saturating_sub(elapsed);
@@ -281,15 +248,6 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, pod: PodHandle, worker_id:
     }
 
     halt(&mw);
-
-    // and then kill the whole isolate
-    let (token, recv) = oneshot::channel();
-    mw.worker_tx.send(WorkerTrigger::Kill { token }).await.ok();
-    recv.await.ok();
-
-    tracing::info!("shutting down, removing worker");
-    // after we successfully killed it, we can essentially 'remove' this worker
-    let _ = pod.remove_worker(worker_id).await;
 }
 
 fn halt(mw: &MonitoredWorker) {

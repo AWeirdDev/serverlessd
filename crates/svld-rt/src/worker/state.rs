@@ -7,7 +7,7 @@ use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 use svld_blocks::{Blocks, HttpClientBlock, ReplierBlock};
 use svld_language::ThrowException;
 
-use crate::worker::{MonitorHandle, MonitoredFuture, Monitoring, WorkerTx};
+use crate::worker::{MonitorHandle, Monitoring, WorkerTx};
 
 type ResolutionCallback =
     Box<dyn for<'s> FnOnce(&mut v8::PinScope<'s, '_>) -> v8::Local<'s, v8::Value>>;
@@ -141,11 +141,6 @@ impl WorkerState {
     #[inline(always)]
     pub fn tick_monitoring(&self) {
         self.monitoring.tick();
-    }
-
-    #[inline(always)]
-    pub fn monitored_future<F: Future>(&self, f: F) -> MonitoredFuture<F> {
-        self.monitoring.monitored_future(f)
     }
 
     /// Schedules promise resolution and tick with [`WorkerState::tick_event_loop()`].

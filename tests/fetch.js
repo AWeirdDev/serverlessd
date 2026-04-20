@@ -1,6 +1,7 @@
 export default {
   async fetch() {
     let res = await fetch("https://httpbin.org/anything");
-    return "no time out please";
+    let result = await res.json();
+    return JSON.stringify(result);
   },
 };
