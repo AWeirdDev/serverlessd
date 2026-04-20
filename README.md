@@ -10,17 +10,37 @@
 
 Serverless workers management architecture. **Work in progress**.
 
-I'm working on the "automatic scaling" part now, just to be clear.
-
 You can use this for:
 
 - Getting a local serverless runtime up and running
 - Custom LLM toolkit for fast execution
+- Setting up a lightweight container for running quick scripts
 
+## Installation
+You can install this via an install script ([is.gd/serverlessd](https://is.gd/serverlessd); you can inspect the code), if you'd like:
+
+```sh
+# inspect the code first
+curl -fsSL https://is.gd/serverlessd
+
+# ...then install
+curl -fsSL https://is.gd/serverlessd | sh
+```
+
+<details>
+
+<summary>Safer alternative</summary>
+
+If you still have safety concerns, a safer alternative would be to download from the [Releases](https://github.com/AWeirdDev/serverlessd/releases).
+It's just that you'd have to type a bit more. And I just hate typing.
+
+</details>
+
+## Getting started
 To start:
 
 ```sh
-$ serverlessd run --n-pods 10 --n-workers-per-pod 2
+$ serverlessd run --pods 10 --workers-per-pod 2
 =====> server started at http://127.0.0.1:3000
 ```
 
