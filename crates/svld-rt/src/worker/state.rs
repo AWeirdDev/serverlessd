@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::VecDeque, ffi::c_void, ptr::NonNull, sync:
 
 use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
-use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
+use v8::{Context, Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
 use svld_blocks::{Blocks, HttpClientBlock, ReplierBlock};
 use svld_language::ThrowException;
@@ -27,6 +27,15 @@ pub struct WorkerState {
     pub platform: SharedRef<Platform>,
     pub monitoring: Monitoring,
     pub blocks: Blocks,
+
+    /// The V8 context created for this worker task.
+    ///
+    /// Stored as a Global so it can be re-entered across every scope boundary
+    /// without creating a new context each time.  All promises, microtasks,
+    /// and JS objects belong to this single context; mixing contexts causes
+    /// `perform_microtask_checkpoint` to drain the wrong queue, leading to the
+    /// "Cannot create a handle without a HandleScope" V8 fatal error.
+    pub context: RefCell<Option<Global<Context>>>,
 }
 
 /// Parameters for creating a worker state.
@@ -81,6 +90,7 @@ impl WorkerState {
                     .add_block(ReplierBlock::new())
                     .add_block(HttpClientBlock::new())
             },
+            context: RefCell::new(None),
         });
 
         let item = Arc::clone(&slf);
@@ -135,6 +145,24 @@ impl WorkerState {
     #[inline]
     pub fn close(self: Arc<Self>) {
         self.tasks.close();
+    }
+
+    /// Store the V8 context that was created for this worker task.
+    #[inline]
+    pub fn set_context(&self, ctx: Global<Context>) {
+        *self.context.borrow_mut() = Some(ctx);
+    }
+
+    /// Return a clone of the stored context.
+    ///
+    /// Panics if called before `set_context`.
+    #[inline]
+    pub fn get_context(&self) -> Global<Context> {
+        self.context
+            .borrow()
+            .as_ref()
+            .expect("worker context not initialised")
+            .clone()
     }
 
     /// Ticks the [`Monitoring`].
