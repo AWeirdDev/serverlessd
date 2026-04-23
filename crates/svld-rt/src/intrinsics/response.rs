@@ -1,4 +1,4 @@
-use std::{mem, ptr::NonNull};
+use std::{ffi::c_void, ptr::NonNull};
 
 use svld_language::{ThrowException, throw};
 use v8::{Global, Local, Value};
@@ -445,10 +445,14 @@ fn get_rs_constructor<'s>(scope: &mut v8::PinScope<'s, '_>) -> Option<Local<'s, 
     if inner.is_null() {
         return None;
     }
-    let gintrinsics =
-        unsafe { Global::from_raw(scope, NonNull::new_unchecked(inner as *mut v8::Value)) };
+
+    let ptr = unsafe { NonNull::new_unchecked(inner as *mut v8::Value) };
+    let gintrinsics = unsafe { Global::from_raw(scope, ptr) };
+
+    let preserved = gintrinsics.clone();
     let intrinsics = Local::new(scope, gintrinsics);
-    mem::forget(Global::new(scope, intrinsics));
+
+    scope.set_data(1, preserved.into_raw().as_ptr() as *mut c_void);
     Some(
         intrinsics
             .cast::<v8::Object>()

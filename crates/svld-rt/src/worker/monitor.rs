@@ -3,7 +3,7 @@ use std::{thread, time::Duration};
 use tokio::{
     sync::{mpsc, oneshot},
     task::LocalSet,
-    time::Instant,
+    time,
 };
 use tokio_util::task::TaskTracker;
 
@@ -187,62 +187,64 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
 
     let mut elapsed = Duration::default();
 
-    let walltime_tick = tokio::time::sleep(Duration::from_secs(10));
+    let walltime_tick = time::sleep(Duration::from_secs(10));
     tokio::pin!(walltime_tick);
 
-    let deadline = tokio::time::sleep(Duration::from_millis(100));
+    let deadline = time::sleep(Duration::from_millis(10));
     tokio::pin!(deadline);
 
     loop {
-        tokio::select! {
+        let first = tokio::select! {
             biased;
-
             _ = &mut walltime_tick => {
                 tracing::warn!("(per worker, 10s) time's up");
                 break;
             }
-
-            _ = mw.rx.recv() => (),
+            msg = mw.rx.recv() => msg,
         };
+
+        if first.is_none() {
+            // channel closed
+            return;
+        }
 
         tracing::info!("WAITING SECOND TICK...");
 
-        let start = Instant::now();
+        let remaining = Duration::from_millis(10).saturating_sub(elapsed);
+        if remaining.is_zero() {
+            tracing::warn!("(per task, 10ms) time's up");
+            break;
+        }
+
+        deadline.as_mut().reset(time::Instant::now() + remaining);
+
+        let start = time::Instant::now();
 
         let message = tokio::select! {
             biased;
-
             _ = &mut walltime_tick => {
                 tracing::warn!("(per worker, 10s) time's up");
                 break;
             }
-
             _ = &mut deadline => {
-                tracing::warn!("(per task, 100ms) time's up");
+                tracing::warn!("(per task, 10ms) time's up");
                 break;
             }
-
             msg = mw.rx.recv() => msg,
         };
 
         match message {
             Some(()) => {
-                tracing::info!("FULLFILLED TICK");
+                tracing::info!("FULFILLED TICK");
                 elapsed += start.elapsed();
-
-                let remaining = Duration::from_millis(100).saturating_sub(elapsed);
-
-                deadline.as_mut().reset(Instant::now() + remaining);
-
-                if remaining.is_zero() {
-                    tracing::warn!("(per task, 100ms) time's up");
+                if elapsed >= Duration::from_millis(10) {
+                    tracing::warn!("(per task, 10ms) time's up");
                     break;
                 }
             }
             None => {
-                // channel closed, worker is gone
-                tracing::info!("worker channel closed");
-                break;
+                // channel closed
+                return;
             }
         }
     }

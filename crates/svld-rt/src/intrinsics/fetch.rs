@@ -172,7 +172,8 @@ pub fn fetch(
 
     let resolver = some!(PromiseResolver::new(scope));
     let gresolver = Global::new(scope, resolver);
-    let fut = {
+
+    {
         let state2 = state.clone();
         state.tasks.spawn_local(async move {
             let resp = match rq.send().await {
@@ -218,7 +219,6 @@ pub fn fetch(
             );
         })
     };
-    state.tasks.spawn_local(fut);
 
     rv.set(resolver.cast());
 }
