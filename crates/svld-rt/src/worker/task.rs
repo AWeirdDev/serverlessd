@@ -120,14 +120,18 @@ pub(super) async fn create_cancel_safe_task(
 
                 match result {
                     Ok(should_restart) => {
-                        // close the state
-                        state_handle.take().map(|st| close_state(st));
+                        let maybe_tasks = state_handle.as_ref().map(|st| st.tasks.clone());
 
-                        // chances are pretty small
                         if !should_restart {
+                            if let Some(tasks) = maybe_tasks {
+                                tasks.wait().await;
+                            }
+                            state_handle.take().map(|st| close_state(st));
                             drop_isolate(isolate_ptr);
-                            break;
+                            return;
                         }
+
+                        state_handle.take().map(|st| close_state(st));
                     }
                     Err(err) => {
                         tracing::error!("got error on closed handler, {:?}", err);
@@ -165,6 +169,8 @@ pub(super) async fn create_cancel_safe_task(
             }
         }
     }
+
+    drop_isolate(isolate_ptr);
 }
 
 #[inline(always)]

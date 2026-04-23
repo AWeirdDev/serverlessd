@@ -55,21 +55,6 @@ impl Pod {
         !self.vacancies.is_empty() || self.workers.len() < self.workers.capacity()
     }
 
-    /// Get the next worker ID.
-    /// You **must** check if this pod has a vacancy first.
-    #[inline(always)]
-    pub fn get_next_worker_id(&mut self) -> usize {
-        self.vacancies
-            .iter()
-            .next()
-            .map(|item| *item)
-            .unwrap_or_else(|| {
-                let ln = self.workers.len();
-                self.workers.push(None);
-                ln
-            })
-    }
-
     /// Puts a worker in the pod.
     ///
     /// # Safety
@@ -124,15 +109,27 @@ impl Pod {
         }
     }
 
-    /// Creates and starts a new worker instance, returning the ID of the worker.
+    /// Creates and starts a new worker instance (or reuses a sleeping one), returning the ID.
     #[inline]
     #[must_use]
     pub(super) fn create_and_warmup_worker(&mut self) -> usize {
+        if let Some(&id) = self.vacancies.iter().next() {
+            self.vacancies.remove(&id);
+
+            if self.workers.get(id).map_or(false, |w| w.is_some()) {
+                return id;
+            }
+
+            let handle = WorkerHandle::start(self);
+            if let Some(slot) = self.workers.get_mut(id) {
+                slot.replace(handle);
+            }
+            return id;
+        }
+
         let handle = WorkerHandle::start(self);
-
-        let id = self.get_next_worker_id();
-        self.put_worker(id, handle);
-
+        let id = self.workers.len();
+        self.workers.push(Some(handle));
         id
     }
 }
