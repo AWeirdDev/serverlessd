@@ -100,6 +100,7 @@ pub(super) async fn create_cancel_safe_task(
     isolate.set_microtasks_policy(v8::MicrotasksPolicy::Explicit);
 
     let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
+    let mut isolate_alive = true;
 
     while let Some(msg) = rx.recv().await {
         match msg {
@@ -120,12 +121,21 @@ pub(super) async fn create_cancel_safe_task(
 
                 match result {
                     Ok(should_restart) => {
-                        // close the state
+                        // Clone the TaskTracker before close_state consumes the state, so we
+                        // can wait for any in-flight spawn_local tasks (e.g. pending fetch())
+                        // to finish before dropping the isolate.  Without this wait, dropping
+                        // the isolate while a task still holds a Global<PromiseResolver> tied
+                        // to it causes a V8 use-after-free and the
+                        // "Cannot create a handle without a HandleScope" fatal error.
+                        let maybe_tasks = state_handle.as_ref().map(|st| st.tasks.clone());
                         state_handle.take().map(|st| close_state(st));
 
-                        // chances are pretty small
                         if !should_restart {
+                            if let Some(tasks) = maybe_tasks {
+                                tasks.wait().await;
+                            }
                             drop_isolate(isolate_ptr);
+                            isolate_alive = false;
                             break;
                         }
                     }
@@ -154,7 +164,7 @@ pub(super) async fn create_cancel_safe_task(
                 tracing::info!("received signal KILL at sleep");
                 drop_isolate(isolate_ptr);
                 token.send(()).ok();
-                return;
+                return; // returns before the end-of-function drop check, so no double-free
             }
 
             _ => {
@@ -164,6 +174,12 @@ pub(super) async fn create_cancel_safe_task(
                 );
             }
         }
+    }
+
+    // The channel was closed without an explicit Kill (e.g., the WorkerHandle was dropped
+    // because the pod reassigned the slot).  Drop the isolate here to prevent a memory leak.
+    if isolate_alive {
+        drop_isolate(isolate_ptr);
     }
 }
 
@@ -293,30 +309,30 @@ async fn create_task(
         let Some(maybe_event) = maybe_event_if_trigger else {
             tracing::info!("resolving event loop");
 
+            let gctx = state.get_context();
             let isolate = unsafe { state.get_isolate() };
-            scope_with_context!(
-                isolate: isolate,
-                let &mut scope,
-                let context
-            );
+            scope_with_context!(isolate: isolate, context: &gctx, let &mut scope);
             try_catch!(scope: scope, let try_catch);
 
-            let mut resolutions = state.pending_resolutions.borrow_mut();
-            while let Some((gresolver, result)) = resolutions.pop_front() {
-                let resolver = Local::new(try_catch, gresolver);
-                match result {
-                    Ok(callback) => {
-                        let cb = callback(try_catch);
-                        let value = Local::new(try_catch, cb);
-
-                        resolver.resolve(try_catch, value);
-                    }
-                    Err(err) => {
-                        let err = Local::new(try_catch, throw(try_catch, err));
-                        resolver.reject(try_catch, err);
+            // Release the borrow before perform_microtask_checkpoint so that
+            // any .then() handler which calls fetch() can push into the queue.
+            {
+                let mut resolutions = state.pending_resolutions.borrow_mut();
+                while let Some((gresolver, result)) = resolutions.pop_front() {
+                    let resolver = Local::new(try_catch, gresolver);
+                    match result {
+                        Ok(callback) => {
+                            let cb = callback(try_catch);
+                            let value = Local::new(try_catch, cb);
+                            resolver.resolve(try_catch, value);
+                        }
+                        Err(err) => {
+                            let err = Local::new(try_catch, throw(try_catch, err));
+                            resolver.reject(try_catch, err);
+                        }
                     }
                 }
-            }
+            } // <-- borrow released here
 
             tracing::info!("ticking");
             state.tick_monitoring();
@@ -358,12 +374,9 @@ async fn create_task(
                 tracing::info!("worker received http");
 
                 if let Some(gfetch) = entrypoint_fetch.take() {
+                    let gctx = state.get_context();
                     let isolate = unsafe { state.get_isolate() };
-                    scope_with_context!(
-                        isolate: isolate,
-                        let &mut scope,
-                        let context
-                    );
+                    scope_with_context!(isolate: isolate, context: &gctx, let &mut scope);
                     try_catch!(scope: scope, let try_catch);
 
                     let fetch = Local::new(try_catch, gfetch);
@@ -507,6 +520,13 @@ async fn init_worker_for_task(
         );
         try_catch!(scope: scope, let try_catch);
 
+        // Persist this context so every later scope entry reuses it.
+        // Creating a fresh context on each scope entry (the old behaviour)
+        // means promises, microtasks, and .then() callbacks all live in
+        // Context A while perform_microtask_checkpoint() drains Context B,
+        // causing the V8 "Cannot create a handle without a HandleScope" crash.
+        state.set_context(Global::new(try_catch, context));
+
         let intrinsics_obj = unwrap!(try_catch, some init intrinsics::build_intrinsics(try_catch));
         try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
 
@@ -572,6 +592,23 @@ fn close_state(state: Arc<WorkerState>) {
     drop(state);
 
     let state2 = WorkerState::open_from_isolate(isolate);
+
+    // Clear globals using the original context (not a fresh one).
+    // Do this before close() consumes state2.
+    if let Some(gctx) = state2.context.borrow_mut().take() {
+        scope_with_context!(isolate: isolate, context: &gctx, let &mut scope);
+        let context = scope.get_current_context();
+        let global = context.global(scope);
+        let own_props = global
+            .get_own_property_names(scope, GetPropertyNamesArgs::default())
+            .unwrap();
+        for i in 0..own_props.length() {
+            let key = own_props.get_index(scope, i).unwrap();
+            global.delete(scope, key);
+        }
+        // gctx (the Global<Context>) is dropped here
+    }
+
     state2.close();
 
     // then the global intrinsics
@@ -579,22 +616,6 @@ fn close_state(state: Arc<WorkerState>) {
     if !data.is_null() {
         let _ =
             unsafe { Global::from_raw(isolate, NonNull::new_unchecked(data as *mut v8::Value)) };
-    }
-
-    // then all the globals, we gotta erase em
-    scope_with_context!(
-        isolate: isolate,
-        let &mut scope,
-        let context
-    );
-    let global = context.global(scope);
-    let own_props = global
-        .get_own_property_names(scope, GetPropertyNamesArgs::default())
-        .unwrap();
-
-    for i in 0..own_props.length() {
-        let key = own_props.get_index(scope, i).unwrap();
-        global.delete(scope, key);
     }
 
     // at this point, state & state2 gets dropped
