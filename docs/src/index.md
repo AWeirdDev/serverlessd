@@ -1,0 +1,39 @@
+# serverlessd
+
+A lightweight serverless worker runtime.
+
+## Architecture
+Overall, the architecture is self-explanatory. Within a Serverless Runtime, there can be numerous workers, and each worker consists of two threads: the **Monitor Thread** and the **Worker Thread**.
+
+- **Monitor thread**: For monitoring workers, checking whether they've exceeded the time limit.
+- **Worker thread**: An single-threaded asynchornous runtime for running workers.
+
+Since there's only one worker thread, it's recommended to put about 2-3 workers per pod, if following the recommended timeout settings.
+
+Serverless runtime, pods, and workers communicate via message passing, making it near lock-free.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Serverless Runtime                           │
+│                                                                     │
+│  ┌──────────────────────────┐   ┌──────────────────────────┐        │
+│  │          Pod 0           │   │          Pod 1           │  ...   │
+│  │                          │   │                          │  more  │
+│  │  ┌────────────────────┐  │   │  ┌────────────────────┐  │  pods  │
+│  │  │   Monitor Thread   │  │   │  │   Monitor Thread   │  │        │
+│  │  └────────────────────┘  │   │  └────────────────────┘  │        │
+│  │                          │   │                          │        │
+│  │  ┌────────────────────┐  │   │  ┌────────────────────┐  │        │
+│  │  │   Worker Thread    │  │   │  │   Worker Thread    │  │        │
+│  │  │                    │  │   │  │                    │  │        │
+│  │  │  ┌──────────────┐  │  │   │  │  ┌──────────────┐  │  │        │
+│  │  │  │   Worker 0   │  │  │   │  │  │   Worker 0   │  │  │        │
+│  │  │  ├──────────────┤  │  │   │  │  ├──────────────┤  │  │        │
+│  │  │  │   Worker 1   │  │  │   │  │  │   Worker 1   │  │  │        │
+│  │  │  ├──────────────┤  │  │   │  │  ├──────────────┤  │  │        │
+│  │  │  │   Worker 2   │  │  │   │  │  │   Worker 2   │  │  │        │
+│  │  │  └──────────────┘  │  │   │  │  └──────────────┘  │  │        │
+│  │  └────────────────────┘  │   │  └────────────────────┘  │        │
+│  └──────────────────────────┘   └──────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────────┘
+```
