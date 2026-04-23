@@ -100,6 +100,7 @@ pub(super) async fn create_cancel_safe_task(
     isolate.set_microtasks_policy(v8::MicrotasksPolicy::Explicit);
 
     let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
+    let mut isolate_alive = true;
 
     while let Some(msg) = rx.recv().await {
         match msg {
@@ -120,12 +121,21 @@ pub(super) async fn create_cancel_safe_task(
 
                 match result {
                     Ok(should_restart) => {
-                        // close the state
+                        // Clone the TaskTracker before close_state consumes the state, so we
+                        // can wait for any in-flight spawn_local tasks (e.g. pending fetch())
+                        // to finish before dropping the isolate.  Without this wait, dropping
+                        // the isolate while a task still holds a Global<PromiseResolver> tied
+                        // to it causes a V8 use-after-free and the
+                        // "Cannot create a handle without a HandleScope" fatal error.
+                        let maybe_tasks = state_handle.as_ref().map(|st| st.tasks.clone());
                         state_handle.take().map(|st| close_state(st));
 
-                        // chances are pretty small
                         if !should_restart {
+                            if let Some(tasks) = maybe_tasks {
+                                tasks.wait().await;
+                            }
                             drop_isolate(isolate_ptr);
+                            isolate_alive = false;
                             break;
                         }
                     }
@@ -154,7 +164,7 @@ pub(super) async fn create_cancel_safe_task(
                 tracing::info!("received signal KILL at sleep");
                 drop_isolate(isolate_ptr);
                 token.send(()).ok();
-                return;
+                return; // returns before the end-of-function drop check, so no double-free
             }
 
             _ => {
@@ -164,6 +174,12 @@ pub(super) async fn create_cancel_safe_task(
                 );
             }
         }
+    }
+
+    // The channel was closed without an explicit Kill (e.g., the WorkerHandle was dropped
+    // because the pod reassigned the slot).  Drop the isolate here to prevent a memory leak.
+    if isolate_alive {
+        drop_isolate(isolate_ptr);
     }
 }
 
