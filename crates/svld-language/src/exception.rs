@@ -33,6 +33,19 @@ impl ExceptionDetails {
     }
 }
 
+impl std::fmt::Debug for ExceptionDetails {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.stack)
+    }
+}
+
+impl ToString for ExceptionDetails {
+    #[inline]
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
 pub trait ExceptionDetailsExt {
     /// Gets the exception details for better error-handling support.
     fn exception_details(&self) -> Option<ExceptionDetails>;
@@ -86,12 +99,6 @@ impl ThrowException {
                 bind_to_v8_err!(message: message, exc: v8::Exception::type_error)
             }
         }
-    }
-}
-
-impl std::fmt::Debug for ExceptionDetails {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.stack)
     }
 }
 

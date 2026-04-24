@@ -66,7 +66,13 @@ pub(super) async fn serverless_task(
 
                                 tracing::info!("creating worker task");
                                 let Some((pod_handle, pod_id, pod_worker_id)) = serverless.find_vacancy_and_warmup().await else {
-                                    reply.send(Err(CreateWorkerError::CannotCreateTask)).ok();
+                                    reply.send(
+                                        Err(
+                                            CreateWorkerError::CannotCreateTask(
+                                                "failed to find vacancy and warm up worker".to_string()
+                                            )
+                                        )
+                                    ).ok();
                                     continue;
                                 };
 
@@ -85,7 +91,6 @@ pub(super) async fn serverless_task(
                                 }
 
                                 tracing::info!("done with creating worker task");
-
                             }
                             ServerlessTrigger::ToPod { id, trigger } => {
                                 if let Some(pod) = serverless.get_pod(id) {

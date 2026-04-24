@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use svld_language::ExceptionDetails;
-
 /// Represents a worker error.
 #[derive(Debug, Error)]
 pub enum WorkerError {
@@ -11,11 +9,11 @@ pub enum WorkerError {
 
     /// Failed to compile.
     #[error("Failed to compile, details: {0:?}")]
-    CompileError(Option<ExceptionDetails>),
+    CompileError(String),
 
     /// Error on initialization.
     #[error("Failed to init module, details: {0:?}")]
-    ModuleInitError(Option<ExceptionDetails>),
+    ModuleInitError(String),
 
     // we need to blacklist these workers immediately
     /// Entrypoint is not found.

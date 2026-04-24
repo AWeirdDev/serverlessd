@@ -32,7 +32,6 @@ svld-rt = { path = "./crates/svld-rt" }
 [workspace]
 members = [
     "crates/svld-language",
-    "crates/svld-blocks",
     "crates/svld-rt",
     "crates/svld-types",
 ]

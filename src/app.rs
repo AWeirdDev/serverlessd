@@ -73,7 +73,7 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     let name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
 
-    let (pod, wrk) = match state.serverless.create_worker(name).await {
+    let (pod_id, worker_id) = match state.serverless.create_worker(name).await {
         Ok(t) => t,
         Err(err) => {
             match err {
@@ -87,7 +87,10 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
                     .ok();
                     res.render(NotFoundTemplate.to_string());
                 }
-                CreateWorkerError::CannotCreateTask => {
+
+                CreateWorkerError::CannotCreateTask(reason) => {
+                    tracing::error!("failed to create task; reason: {reason}");
+
                     res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
                     res.add_header(
                         HeaderName::from_static("content-type"),
@@ -108,13 +111,19 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
         }
     };
 
-    let Some(result) = state.serverless.send_http_to_worker(pod, wrk).await else {
+    tracing::info!("sending http to worker");
+    let Some(result) = state
+        .serverless
+        .send_http_to_worker(pod_id, worker_id)
+        .await
+    else {
         res.add_header(
             HeaderName::from_static("content-type"),
             HeaderValue::from_static("text/html"),
             true,
         )
         .ok();
+
         res.render(
             ErrorTemplate {
                 reasoning: "Failed to execute worker; an unknown error occurred.",
@@ -124,11 +133,20 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
         return;
     };
 
+    {
+        let success = state.serverless.halt_task(pod_id, worker_id).await;
+        if !success {
+            tracing::error!("failed to halt task after http is done");
+        }
+    }
+
     match result {
         Ok(t) => {
             res.render(t);
         }
         Err(err) => {
+            tracing::error!("got error after worker execution: {err}");
+
             res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
             res.add_header(
                 HeaderName::from_static("content-type"),

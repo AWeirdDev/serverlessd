@@ -62,6 +62,7 @@ pub(super) async fn create_cancel_safe_task(
 
     let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
 
+    let mut roll_id = 0_i32;
     while let Some(msg) = rx.recv().await {
         match msg {
             WorkerTrigger::StartTask { id, task } => {
@@ -70,13 +71,16 @@ pub(super) async fn create_cancel_safe_task(
                 let mut state_handle = None;
 
                 let result = create_task(
-                    id,
-                    isolate_ptr,
-                    task,
-                    tx.clone(),
                     &mut rx,
-                    monitor_handle.clone(),
-                    &mut state_handle,
+                    InitWorkerArgs {
+                        worker_id: id,
+                        isolate: isolate_ptr,
+                        task,
+                        tx: tx.clone(),
+                        monitor_handle: monitor_handle.clone(),
+                        state_handle: &mut state_handle,
+                        roll_id,
+                    },
                 )
                 .await;
                 tracing::info!("task stopped/finished, marking worker as sleeping");
@@ -97,7 +101,7 @@ pub(super) async fn create_cancel_safe_task(
 
                         if let Some(st) = state_handle.take() {
                             st.blocks.with_block::<ReplierBlock, _>(move |block| {
-                                tracing::info!("the received error was sent to the replier.");
+                                tracing::error!("the received error was sent to the replier.");
                                 if let Some(replier) = block.take_replier() {
                                     replier.send(Err(err)).ok();
                                 }
@@ -107,10 +111,11 @@ pub(super) async fn create_cancel_safe_task(
                     }
                 }
 
+                roll_id += roll_id.wrapping_add(1);
                 pod_tx
                     .send(PodTrigger::MarkWorkerAsSleeping { id })
                     .await
-                    .unwrap();
+                    .ok();
             }
 
             WorkerTrigger::Kill { token } => {
@@ -139,35 +144,29 @@ fn drop_isolate(isolate_ptr: NonNull<OwnedIsolate>) {
     tracing::info!("isolate is shut down.");
 }
 
+#[repr(packed)]
+struct InitWorkerArgs<'a> {
+    worker_id: usize,
+    isolate: NonNull<OwnedIsolate>,
+    task: WorkerTask,
+    tx: WorkerTx,
+    monitor_handle: MonitorHandle,
+    state_handle: &'a mut Option<Arc<WorkerState>>,
+    roll_id: i32,
+}
+
 /// Create a task for running this worker.
 ///
 /// # Returns
 /// A `bool`, indicating whether to reuse this warmed worker.
 #[tracing::instrument(skip_all)]
-async fn create_task(
-    worker_id: usize,
-    isolate_ptr: NonNull<OwnedIsolate>,
-    task: WorkerTask,
-    tx: WorkerTx,
-    rx: &mut WorkerRx,
-    monitor_handle: MonitorHandle,
-    state_handle: &mut Option<Arc<WorkerState>>,
-) -> Result<bool, WorkerError> {
+async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool, WorkerError> {
     let InitResult {
         state,
         module,
         promise,
     } = {
-        match init_worker_for_task(
-            worker_id,
-            isolate_ptr,
-            task,
-            tx,
-            monitor_handle,
-            state_handle,
-        )
-        .await
-        {
+        match init_worker_for_task(args).await {
             Ok(t) => t,
             Err(e) => {
                 return Err(e);
@@ -300,6 +299,8 @@ async fn create_task(
         };
 
         let Some(event) = maybe_event else {
+            // literally nobody is holding shit to us
+            // we might as well just say goodbye
             return Ok(false);
         };
 
@@ -353,7 +354,6 @@ async fn create_task(
 
                     // next: call
                     state.tick_monitoring();
-                    tracing::info!("calling fetch...");
                     let Some(result) = fetch.call(try_catch, v8::undefined(try_catch).cast(), &[])
                     else {
                         return Err(WorkerError::Timeout);
@@ -423,7 +423,7 @@ async fn create_task(
         }
     }
 
-    Ok(false)
+    Ok(true)
 }
 
 struct InitResult {
@@ -433,12 +433,15 @@ struct InitResult {
 }
 
 async fn init_worker_for_task(
-    worker_id: usize,
-    isolate: NonNull<OwnedIsolate>,
-    task: WorkerTask,
-    tx: WorkerTx,
-    monitor_handle: MonitorHandle,
-    state_handle: &mut Option<Arc<WorkerState>>,
+    InitWorkerArgs {
+        worker_id,
+        isolate,
+        task,
+        tx,
+        monitor_handle,
+        state_handle,
+        roll_id,
+    }: InitWorkerArgs<'_>,
 ) -> Result<InitResult, WorkerError> {
     let WorkerTask { source, platform } = task;
 
@@ -488,7 +491,7 @@ async fn init_worker_for_task(
 
         let module = unwrap_compilation(
             try_catch,
-            compile::compile_module(try_catch, source, "worker.js"),
+            compile::compile_module(try_catch, source, format!("worker.js",), roll_id),
         )?;
 
         // instantiate imports, etc.
@@ -575,6 +578,8 @@ fn close_state(state: Arc<WorkerState>) {
         let key = own_props.get_index(scope, i).unwrap();
         global.delete(scope, key);
     }
+
+    scope.low_memory_notification();
 
     // at this point, state & state2 gets dropped
     // memory gets freed (hopefully, PLEASE)

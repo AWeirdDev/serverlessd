@@ -2759,17 +2759,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "svld-blocks"
-version = "0.1.0"
-dependencies = [
- "reqwest",
- "svld-types",
- "thiserror 2.0.18",
- "tokio",
- "typeid",
-]
-
-[[package]]
 name = "svld-language"
 version = "0.1.0"
 dependencies = [
@@ -2786,13 +2775,13 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "svld-blocks",
  "svld-language",
  "svld-types",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
+ "typeid",
  "v8",
 ]
 
@@ -2800,7 +2789,6 @@ dependencies = [
 name = "svld-types"
 version = "0.1.0"
 dependencies = [
- "svld-language",
  "thiserror 2.0.18",
 ]
 
@@ -3318,9 +3306,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.23.0"
+version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ac8b6f42ead25368cf5b098aeb3dc8a1a2c05a3eee8a9a1a68c640edbfc79d9"
+checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",

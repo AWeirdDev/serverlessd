@@ -30,13 +30,37 @@ impl ServerlessHandle {
         self.tx
             .send(ServerlessTrigger::CreateWorker { name, reply })
             .await
-            .map_err(|_| CreateWorkerError::CannotCreateTask)?;
+            .map_err(|_| {
+                CreateWorkerError::CannotCreateTask(
+                    "cannot notify serverless task loop to create worker".to_string(),
+                )
+            })?;
 
         let Ok(result) = receive.await else {
-            return Err(CreateWorkerError::CannotCreateTask);
+            return Err(CreateWorkerError::CannotCreateTask(
+                "cannot receive from serverless worker; the channel has possibly closed"
+                    .to_string(),
+            ));
         };
 
         result
+    }
+
+    /// Halts a task for a worker in a pod.
+    ///
+    /// After this, the worker will mark itself as "sleeping."
+    #[inline]
+    #[must_use]
+    pub async fn halt_task(&self, pod_id: usize, worker_id: usize) -> bool {
+        self.trigger(ServerlessTrigger::ToPod {
+            id: pod_id,
+            trigger: PodTrigger::ToWorker {
+                id: worker_id,
+                trigger: WorkerTrigger::HaltTask,
+            },
+        })
+        .await
+        .is_some()
     }
 
     /// Upload worker code.
@@ -70,16 +94,7 @@ impl ServerlessHandle {
         })
         .await?;
 
-        // we need to turn it into a sleeping state first
         let result = recv.await.ok()?;
-        self.trigger(ServerlessTrigger::ToPod {
-            id: pod,
-            trigger: PodTrigger::ToWorker {
-                id: wrk,
-                trigger: WorkerTrigger::HaltTask,
-            },
-        })
-        .await?;
 
         Some(result)
     }

@@ -59,7 +59,6 @@ pub fn fetch(
     args: v8::FunctionCallbackArguments,
     mut rv: v8::ReturnValue,
 ) {
-    tracing::info!("fetch()");
     let state = WorkerState::get_from_isolate(scope);
 
     if args.length() == 0 {

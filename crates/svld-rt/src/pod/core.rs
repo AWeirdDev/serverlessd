@@ -41,7 +41,14 @@ impl Pod {
 
         let pod = Self {
             tx: tx,
-            workers: Vec::with_capacity(n_workers),
+            workers: {
+                let mut v = Vec::with_capacity(n_workers);
+                for _ in 0..n_workers {
+                    v.push(StatedWorkerHandle::Absent);
+                }
+
+                v
+            },
             tasks: TaskTracker::new(),
             monitor: {
                 let m = Monitor::new();
@@ -121,10 +128,13 @@ impl Pod {
     pub(super) fn create_and_warmup_worker(&mut self) -> Option<usize> {
         let (worker_id, sleeping) = self.find_available_worker_spot()?;
 
+        let stated_handle = unsafe { self.workers.get_mut(worker_id).unwrap_unchecked() };
         if !sleeping {
             let handle = WorkerHandle::start(self);
             let stated_handle = unsafe { self.workers.get_mut(worker_id).unwrap_unchecked() };
             stated_handle.replace(StatedWorkerHandle::Running(Some(handle)));
+        } else {
+            stated_handle.mark_as_running();
         }
 
         Some(worker_id)
