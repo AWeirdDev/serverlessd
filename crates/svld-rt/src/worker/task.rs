@@ -1,6 +1,6 @@
 use std::{ffi::c_void, ptr::NonNull, sync::Arc};
 
-use svld_types::WorkerError;
+use super::WorkerError;
 use v8::{
     External, Function, GetPropertyNamesArgs, Global, Local, Module, OwnedIsolate, Platform,
     Promise, SharedRef,

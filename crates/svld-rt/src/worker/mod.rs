@@ -1,9 +1,11 @@
+mod error;
 mod handle;
 mod monitor;
 mod state;
 mod task;
 mod trigger;
 
+pub use error::WorkerError;
 pub use handle::WorkerHandle;
 pub use monitor::{Monitor, MonitorHandle, Monitoring};
 pub use state::WorkerState;

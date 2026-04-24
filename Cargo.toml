@@ -33,5 +33,4 @@ svld-rt = { path = "./crates/svld-rt" }
 members = [
     "crates/svld-language",
     "crates/svld-rt",
-    "crates/svld-types",
 ]

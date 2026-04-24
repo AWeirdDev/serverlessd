@@ -1,7 +1,6 @@
 # Pending
 - [ ] worker custom environment variables
-- [ ] fetch
-- [ ] `ReadableStream` API
+- [ ] accept `Response`
 
 # Done
 - [x] add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
@@ -10,3 +9,5 @@
 - [x] time advancement
 - [x] better error codes at http level and exception handling
 - [x] URGENT: WORKER GETS REMOVED COMPLETELY AND DOESN'T COUNT AS "SLEEPING," SHOULD ADD STATES FOR WORKERS INSTEAD.
+- [x] fetch
+- [x] `ReadableStream` API

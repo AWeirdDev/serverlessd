@@ -2,7 +2,7 @@ use std::{cell::OnceCell, ptr::NonNull};
 
 use tokio::sync::oneshot;
 
-use svld_types::WorkerError;
+use crate::worker::WorkerError;
 
 use super::Block;
 

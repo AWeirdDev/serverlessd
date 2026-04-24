@@ -18,5 +18,4 @@ bytes = "1.11.1"
 
 # custom deps
 svld-language = { path = "../svld-language" }
-svld-types = { path = "../svld-types" }
 typeid = "1.0.3"

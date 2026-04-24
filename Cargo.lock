@@ -2776,20 +2776,12 @@ dependencies = [
  "serde",
  "serde_json",
  "svld-language",
- "svld-types",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
  "typeid",
  "v8",
-]
-
-[[package]]
-name = "svld-types"
-version = "0.1.0"
-dependencies = [
- "thiserror 2.0.18",
 ]
 
 [[package]]

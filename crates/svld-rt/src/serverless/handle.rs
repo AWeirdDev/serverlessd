@@ -6,7 +6,8 @@ use crate::{
     PodTrigger, WorkerTrigger,
     serverless::{
         code_store::CodeStoreError,
-        trigger::{CreateWorkerError, ServerlessTrigger, ServerlessTx},
+        error::CreateWorkerError,
+        trigger::{ServerlessTrigger, ServerlessTx},
     },
 };
 
