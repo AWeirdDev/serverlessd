@@ -6,59 +6,20 @@ use v8::{
     Promise, SharedRef,
 };
 
-use crate::blocks::{MaybeReplier, ReplierBlock};
+use crate::{
+    blocks::{MaybeReplier, ReplierBlock},
+    intrinsics,
+};
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
 
 use crate::{
-    PodTrigger, PodTx, WorkerState, compile, intrinsics, scope_with_context, try_catch,
+    PodTrigger, PodTx, WorkerState, compile, scope_with_context, try_catch,
     worker::{
         MonitorHandle, WorkerTx,
         state::CreateWorkerState,
         trigger::{WorkerRx, WorkerTrigger},
     },
 };
-
-/// Unwrap.
-///
-/// # Option<T>
-/// ```no_run
-/// // this should be used within create_task()
-/// let a = Some(1);
-/// let b = unwrap!(
-///     try_catch_scope,
-///     some init a.map(|k| k + 1)
-/// );
-/// assert!(b == 2);
-/// ```
-macro_rules! unwrap {
-    ($try_catch:expr, some $p:expr => $k:expr) => {{
-        let Some(k) = $k else {
-            return Err($p($try_catch.exception_details()));
-        };
-        k
-    }};
-
-    ($try_catch:expr, some compile $k:expr) => {
-        unwrap!($try_catch, some WorkerError::CompileError => $k)
-    };
-
-    ($try_catch:expr, some init $k:expr) => {
-        unwrap!($try_catch, some WorkerError::ModuleInitError => $k)
-    };
-
-    ($try_catch:expr, some runtime $k:expr) => {{
-        let Some(k) = $k else {
-            return Err(
-                WorkerError::RuntimeError(
-                    $try_catch.exception_details()
-                        .map(|item| format!("{:?}", item))
-                        .unwrap_or_else(|| "internal unexpected error".to_string())
-                )
-            );
-        };
-        k
-    }};
-}
 
 /// The worker task.
 ///
@@ -104,6 +65,8 @@ pub(super) async fn create_cancel_safe_task(
     while let Some(msg) = rx.recv().await {
         match msg {
             WorkerTrigger::StartTask { id, task } => {
+                tracing::info!("worker is starting task; initializing");
+
                 let mut state_handle = None;
 
                 let result = create_task(
@@ -242,20 +205,25 @@ async fn create_task(
                         .unwrap()
                         .to_rust_string_lossy(try_catch);
                     tracing::error!("failed to initialize worker: {message}");
+
                     let exception = ExceptionDetails::from_exception(try_catch, value);
-                    return Err(WorkerError::ModuleInitError(exception));
+                    return Err(WorkerError::ModuleInitError(
+                        exception.map(|item| item.to_string()).unwrap_or_else(|| {
+                            "while initializing environment, an error occurred".to_string()
+                        }),
+                    ));
                 }
                 Promised::Resolved(_) => {}
             }
         }
 
         let namespace = module.get_module_namespace().cast::<v8::Object>();
-        let entrypoint = unwrap!(
+        let entrypoint = unwrap_init(
             try_catch,
-            some init namespace.get(try_catch, {
-                unwrap!(try_catch, some init v8::String::new(try_catch, "default")).cast()
-            })
-        );
+            namespace.get(try_catch, {
+                unwrap_init(try_catch, v8::String::new(try_catch, "default"))?.cast()
+            }),
+        )?;
 
         if !entrypoint.is_object() || entrypoint.is_null_or_undefined() {
             tracing::error!("error while getting worker entrypoint");
@@ -264,12 +232,12 @@ async fn create_task(
 
         let entrypoint = entrypoint.cast::<v8::Object>();
         let entrypoint_fetch = {
-            let item = unwrap!(
+            let item = unwrap_init(
                 try_catch,
-                some init entrypoint.get(try_catch, {
-                    unwrap!(try_catch, some init v8::String::new(try_catch, "fetch")).cast()
-                })
-            );
+                entrypoint.get(try_catch, {
+                    unwrap_init(try_catch, v8::String::new(try_catch, "fetch"))?.cast()
+                }),
+            )?;
 
             if item.is_function() {
                 Some(item.cast::<v8::Function>())
@@ -419,13 +387,7 @@ async fn create_task(
                         )
                         .data(External::new(try_catch, replier_ptr as *mut c_void).cast())
                         .build(try_catch);
-                        promise.then(
-                            try_catch,
-                            unwrap!(
-                                try_catch,
-                                some runtime resolve
-                            ),
-                        );
+                        promise.then(try_catch, unwrap_runtime(try_catch, resolve)?);
                     }
 
                     {
@@ -450,7 +412,7 @@ async fn create_task(
                         )
                         .data(External::new(try_catch, replier_ptr as *mut c_void).cast())
                         .build(try_catch);
-                        promise.catch(try_catch, unwrap!(try_catch, some runtime reject));
+                        promise.catch(try_catch, unwrap_runtime(try_catch, reject)?);
                     }
 
                     state.tick_monitoring();
@@ -508,32 +470,51 @@ async fn init_worker_for_task(
         );
         try_catch!(scope: scope, let try_catch);
 
-        let intrinsics_obj = unwrap!(try_catch, some init intrinsics::build_intrinsics(try_catch));
+        let intrinsics_obj = {
+            let build_result = intrinsics::build_intrinsics(try_catch);
+            unwrap_init(try_catch, build_result)?
+        };
+
         try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
 
         // we're gonna put them in the global
         {
             let context_global = context.global(try_catch);
-            unwrap!(
+            unwrap_init(
                 try_catch,
-                some init intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj)
-            );
+                intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj),
+            )?;
         }
 
-        let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
+        let module = unwrap_compilation(
+            try_catch,
+            compile::compile_module(try_catch, source, "worker.js"),
+        )?;
 
         // instantiate imports, etc.
         {
             let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
             if res.is_none() {
-                return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
+                return Err(WorkerError::ModuleInitError(
+                    try_catch
+                        .exception_details()
+                        .map(|item| item.to_string())
+                        .unwrap_or_else(|| {
+                            "module instantiation (imports, etc.) failed".to_string()
+                        }),
+                ));
             }
         }
 
         // instantiate evaluations
         state.tick_monitoring();
         let Some(promise) = module.evaluate(try_catch) else {
-            return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
+            return Err(WorkerError::ModuleInitError(
+                try_catch
+                    .exception_details()
+                    .map(|item| item.to_string())
+                    .unwrap_or_else(|| "failed to evaluate module".to_string()),
+            ));
         };
         state.tick_monitoring();
 
@@ -598,3 +579,28 @@ fn close_state(state: Arc<WorkerState>) {
     // at this point, state & state2 gets dropped
     // memory gets freed (hopefully, PLEASE)
 }
+
+macro_rules! _simple_unwrap_impl {
+    ($name:ident, $p:expr) => {
+        #[inline]
+        #[doc = "Unwrap `Option<T>` data returning, `Ok(T)` if success, `"]
+        #[doc = stringify!($p)]
+        #[doc = "` if failed."]
+        fn $name<T>(
+            scope: &v8::PinnedRef<'_, v8::TryCatch<'_, '_, v8::HandleScope<'_>>>,
+            data: Option<T>,
+        ) -> Result<T, WorkerError> {
+            let Some(data) = data else {
+                return Err($p(scope
+                    .exception_details()
+                    .map(|item| item.to_string())
+                    .unwrap_or_else(|| format!("unknown error"))));
+            };
+            Ok(data)
+        }
+    };
+}
+
+_simple_unwrap_impl!(unwrap_compilation, WorkerError::CompileError);
+_simple_unwrap_impl!(unwrap_init, WorkerError::ModuleInitError);
+_simple_unwrap_impl!(unwrap_runtime, WorkerError::RuntimeError);
