@@ -10,16 +10,12 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
     while let Some(event) = rx.recv().await {
         match event {
             PodTrigger::CheckVacancies { reply } => {
-                tracing::info!(
-                    "pod checking vacancies, vacancies: {:?}, workers: {:?}",
-                    pod.vacancies,
-                    pod.workers,
-                );
+                tracing::info!("pod checking vacancies, workers: {:?}", pod.workers);
                 reply.send(pod.has_vacancies()).ok();
             }
 
             PodTrigger::WarmUpWorker { reply } => {
-                let id = pod.create_and_warmup_worker();
+                let id = unsafe { pod.create_and_warmup_worker().unwrap_unchecked() };
                 reply.send(id).ok();
             }
 
@@ -32,7 +28,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
             PodTrigger::Kill { token } => {
                 tracing::info!("killing workers in this pod...");
                 for worker in pod.workers.drain(..) {
-                    if let Some(worker) = worker {
+                    if let Some(worker) = worker.get_handle() {
                         let (wtoken, recv) = oneshot::channel();
                         let _ = worker.trigger(WorkerTrigger::HaltTask).await;
                         let _ = worker.trigger(WorkerTrigger::Kill { token: wtoken }).await;

@@ -8,7 +8,6 @@ use salvo::{
     prelude::*,
 };
 use serde_json::json;
-use tokio::io;
 
 use svld_rt::{CreateWorkerError, ServerlessHandle};
 
@@ -32,8 +31,8 @@ pub(super) async fn start_server(
     addr: SocketAddr,
     serverless: ServerlessHandle,
     secret: String,
-) -> io::Result<()> {
-    let listener = TcpListener::new(addr).bind().await;
+) -> Result<(), Box<dyn core::error::Error + Send + Sync>> {
+    let listener = TcpListener::new(addr).try_bind().await?;
 
     let router = Router::new()
         .hoop(affix_state::inject(Arc::new(AppState { serverless })))
@@ -47,9 +46,11 @@ pub(super) async fn start_server(
         .push(Router::with_path("{**}").goal(wildcard));
 
     println!("=====> server started at http://{}", addr);
+
     Server::new(listener)
         .serve(Service::new(router).catcher(Catcher::default().hoop(handle_error)))
         .await;
+
     Ok(())
 }
 

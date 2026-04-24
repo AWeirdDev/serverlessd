@@ -120,13 +120,9 @@ pub(super) async fn create_cancel_safe_task(
 
                 match result {
                     Ok(should_restart) => {
-                        let maybe_tasks = state_handle.as_ref().map(|st| st.tasks.clone());
+                        state_handle.take().map(|st| close_state(st));
 
                         if !should_restart {
-                            if let Some(tasks) = maybe_tasks {
-                                tasks.wait().await;
-                            }
-                            state_handle.take().map(|st| close_state(st));
                             drop_isolate(isolate_ptr);
                             return;
                         }
@@ -241,13 +237,15 @@ async fn create_task(
 
             match unsafe { promised.unwrap_unchecked() } {
                 Promised::Rejected(value) => {
-                    tracing::error!("failed to initialize worker");
+                    let message = value
+                        .to_string(try_catch)
+                        .unwrap()
+                        .to_rust_string_lossy(try_catch);
+                    tracing::error!("failed to initialize worker: {message}");
                     let exception = ExceptionDetails::from_exception(try_catch, value);
                     return Err(WorkerError::ModuleInitError(exception));
                 }
-                Promised::Resolved(_) => {
-                    tracing::info!("worker env initialized");
-                }
+                Promised::Resolved(_) => {}
             }
         }
 
@@ -293,13 +291,13 @@ async fn create_task(
             data = rx.recv() => Some(data),
             _ = state.wait_event_loop_tick() => None
         };
-        tracing::info!("tick event!");
 
         // event loop
         let Some(maybe_event) = maybe_event_if_trigger else {
             tracing::info!("resolving event loop");
 
             let isolate = unsafe { state.get_isolate() };
+            tracing::info!("creating scope with context");
             scope_with_context!(
                 isolate: isolate,
                 let &mut scope,
@@ -392,7 +390,6 @@ async fn create_task(
                     else {
                         return Err(WorkerError::Timeout);
                     };
-                    tracing::info!("fetch called");
                     state.tick_monitoring();
 
                     if !result.is_promise() {
@@ -502,8 +499,6 @@ async fn init_worker_for_task(
     // cancel it gracefully
     state_handle.replace(state.clone());
 
-    tracing::info!("initializing environment for worker");
-
     // environment initialization
     let (module, promise) = {
         scope_with_context!(
@@ -527,7 +522,6 @@ async fn init_worker_for_task(
 
         let module = unwrap!(try_catch, some compile compile::compile_module(try_catch, source, "worker.js"));
 
-        tracing::info!("instantiating deps...");
         // instantiate imports, etc.
         {
             let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
@@ -536,14 +530,12 @@ async fn init_worker_for_task(
             }
         }
 
-        tracing::info!("evaluating...");
         // instantiate evaluations
         state.tick_monitoring();
         let Some(promise) = module.evaluate(try_catch) else {
             return Err(WorkerError::ModuleInitError(try_catch.exception_details()));
         };
         state.tick_monitoring();
-        tracing::info!("evaluated.");
 
         let promise = promise.cast::<Promise>();
 

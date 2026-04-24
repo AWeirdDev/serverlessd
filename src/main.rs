@@ -171,6 +171,7 @@ fn main() {
                 ),
                 secret,
             ));
+            rt.shutdown_background();
         }
 
         Command::Clean(args) => {

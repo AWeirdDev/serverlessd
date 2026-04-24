@@ -28,6 +28,8 @@ pub struct Serverless {
     // or whatever, if you're happy with it
     pub platform: SharedRef<Platform>,
     pub pods: Vec<PodHandle>,
+
+    pub vacancies: Vec<usize>,
 }
 
 impl Serverless {
@@ -51,6 +53,7 @@ impl Serverless {
             code_store,
             platform,
             pods,
+            vacancies: Vec::with_capacity(n_threads),
         }
     }
 
@@ -114,7 +117,7 @@ impl Serverless {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn upload_worker_code(
         &mut self,
         name: String,

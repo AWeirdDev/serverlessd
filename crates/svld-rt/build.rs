@@ -6,9 +6,10 @@ fn main() {
         .read_dir()
         .expect("failed to read built-in js lib dir")
         .filter(|k| k.is_ok())
+        .map(|item| item.unwrap())
+        .filter(|item| item.metadata().expect("failed to get metadata").is_dir())
         .map(|item| {
-            item.unwrap()
-                .file_name()
+            item.file_name()
                 .into_string()
                 .expect("failed to convert OsString to String")
         })

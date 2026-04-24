@@ -22,6 +22,9 @@ pub enum PodTrigger {
     /// Warm up a worker.
     ///
     /// You can get then get the ID of the warmed worker.
+    ///
+    /// # Safety
+    /// You **must** check if there are any vacancies available first.
     WarmUpWorker {
         reply: oneshot::Sender<usize>,
     },

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use tokio::task::JoinHandle;
+use tokio::{io, task::JoinHandle};
 
 use svld_rt::{
     CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx, ServerlessTrigger,
@@ -110,7 +110,7 @@ pub(super) async fn serverless_task(
     }
 }
 
-async fn close_serverless(mut serverless: Serverless, handles: Vec<JoinHandle<()>>) {
+async fn close_serverless(mut serverless: Serverless, handles: Vec<JoinHandle<io::Result<()>>>) {
     tracing::info!("sending halt to all pods...");
     serverless.kill().await;
 

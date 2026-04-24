@@ -197,7 +197,6 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
         let first = tokio::select! {
             biased;
             _ = &mut walltime_tick => {
-                tracing::warn!("(per worker, 10s) time's up");
                 break;
             }
             msg = mw.rx.recv() => msg,
@@ -208,11 +207,8 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
             return;
         }
 
-        tracing::info!("WAITING SECOND TICK...");
-
         let remaining = Duration::from_millis(10).saturating_sub(elapsed);
         if remaining.is_zero() {
-            tracing::warn!("(per task, 10ms) time's up");
             break;
         }
 
@@ -223,11 +219,9 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
         let message = tokio::select! {
             biased;
             _ = &mut walltime_tick => {
-                tracing::warn!("(per worker, 10s) time's up");
                 break;
             }
             _ = &mut deadline => {
-                tracing::warn!("(per task, 10ms) time's up");
                 break;
             }
             msg = mw.rx.recv() => msg,
@@ -235,10 +229,8 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
 
         match message {
             Some(()) => {
-                tracing::info!("FULFILLED TICK");
                 elapsed += start.elapsed();
                 if elapsed >= Duration::from_millis(10) {
-                    tracing::warn!("(per task, 10ms) time's up");
                     break;
                 }
             }
@@ -253,11 +245,7 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
 }
 
 fn halt(mw: &MonitoredWorker) {
-    tracing::info!("terminating v8 execution");
-
-    if !mw.isolate.terminate_execution() {
-        tracing::warn!("failed to terminate isolate when time's up (isolate already destroyed)");
-    }
+    mw.isolate.terminate_execution();
 
     // we then halt the current task
     mw.worker_tx.try_send(WorkerTrigger::HaltTask).ok();
