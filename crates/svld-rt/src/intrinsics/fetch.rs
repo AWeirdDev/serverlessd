@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
+use crate::blocks::HttpClientBlock;
 use reqwest::{
     Method,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
-use svld_blocks::HttpClientBlock;
 use v8::{Global, Local, Object, PromiseResolver};
 
 use svld_language::{ThrowException, throw};

@@ -1,3 +1,4 @@
+mod blocks;
 mod compile;
 mod intrinsics;
 mod macros;

@@ -1,4 +1,4 @@
-use svld_blocks::Replier;
+use crate::blocks::Replier;
 
 use tokio::sync::{mpsc, oneshot};
 

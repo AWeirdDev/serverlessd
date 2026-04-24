@@ -4,7 +4,7 @@ use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
-use svld_blocks::{Blocks, HttpClientBlock, ReplierBlock};
+use crate::blocks::{Blocks, HttpClientBlock, ReplierBlock};
 use svld_language::ThrowException;
 
 use crate::worker::{MonitorHandle, Monitoring, WorkerTx};

@@ -6,7 +6,7 @@ use v8::{
     Promise, SharedRef,
 };
 
-use svld_blocks::{MaybeReplier, ReplierBlock};
+use crate::blocks::{MaybeReplier, ReplierBlock};
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
 
 use crate::{

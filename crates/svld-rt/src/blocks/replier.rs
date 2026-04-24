@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 
 use svld_types::WorkerError;
 
-use crate::Block;
+use super::Block;
 
 /// The reply (type) to an HTTP event.
 pub type Reply = Result<String, WorkerError>;

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ptr::NonNull};
 
-use svld_blocks::Block;
+use crate::blocks::Block;
 
 use crate::intrinsics::readable_stream::state::ReadableStreamState;
 
