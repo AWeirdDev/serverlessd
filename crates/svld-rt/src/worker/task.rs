@@ -451,15 +451,24 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                                                 }
                                             };
 
-                                            Some(WorkerHttpResponse::builder()
-                                                .body(data)
-                                                .headers(headers)
-                                                .status(
-                                                    StatusCode::from_u16(status_code).unwrap_or_default(),
-                                                )
-                                                .build())
+                                            Some(
+                                                WorkerHttpResponse::builder()
+                                                    .body(data)
+                                                    .headers(headers)
+                                                    .status(
+                                                        StatusCode::from_u16(status_code).unwrap_or_default(),
+                                                    )
+                                                    .build()
+                                            )
                                         } else {
-                                            None
+                                            let data = result.to_string(scope)?.to_rust_string_lossy(scope);
+                                            Some(
+                                                WorkerHttpResponse::builder()
+                                                    .body(Bytes::from(data))
+                                                    .headers(HeaderMap::new())
+                                                    .status(StatusCode::ACCEPTED)
+                                                    .build()
+                                            )
                                         }
 
                                 };
