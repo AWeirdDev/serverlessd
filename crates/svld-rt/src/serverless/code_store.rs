@@ -32,12 +32,27 @@ pub enum CodeStoreError {
 
 /// Worker code store, using the filesystem.
 #[derive(Debug)]
-pub struct CodeStore;
+pub struct CodeStore {
+    parent: PathBuf,
+    workers_path: PathBuf,
+}
 
 impl CodeStore {
+    /// Creates a new store for worker code.
+    ///
+    /// # Parameters
+    /// - `parent`: The parent path. For instance, `.serverlessd`.
+    /// - `workers_path`: The worker path *name*.
+    ///     For instance, providing `workers` can get you `.serverlessd/workers`,
+    ///     depending on the `parent` parameter.
     #[inline]
-    pub fn new() -> Self {
-        Self
+    pub fn new<P: Into<PathBuf>>(parent: P, workers_path: P) -> Self {
+        let parent = parent.into();
+        let workers_path = parent.join(workers_path.into());
+        Self {
+            parent,
+            workers_path,
+        }
     }
 
     /// Check the filesystem.
@@ -45,12 +60,13 @@ impl CodeStore {
     /// a new one is created.
     #[inline]
     pub async fn check_fs(&self) -> PathBuf {
-        let parent = PathBuf::from(".serverlessd/");
-        let path = parent.join("workers/");
+        let path = self.parent.join("workers/");
 
         if !path.exists() {
             fs::create_dir_all(&path).ok();
-            tokio::fs::write(&parent.join(".gitignore"), "*").await.ok();
+            tokio::fs::write(&self.parent.join(".gitignore"), "*")
+                .await
+                .ok();
         }
 
         path

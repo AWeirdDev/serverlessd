@@ -291,7 +291,10 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
 }
 
 async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr, secret: String) {
-    let serverless = Serverless::new(n_workers, n_workers_per_pod);
+    let serverless = Serverless::builder()
+        .n_workers(n_workers)
+        .n_pods(n_workers_per_pod)
+        .build();
 
     let (_svl, handle) = {
         let (tx, rx) = mpsc::channel(512);

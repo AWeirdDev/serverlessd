@@ -21,8 +21,8 @@ pub(super) async fn serverless_task(
 
     // now, we gotta start those threads
     // i know, this might be a bit not so memory efficient
-    let mut handles = Vec::with_capacity(serverless.n_threads);
-    for _ in 0..serverless.n_threads {
+    let mut handles = Vec::with_capacity(serverless.n_pods);
+    for _ in 0..serverless.n_pods {
         let (pod, handle) = Pod::start(serverless.n_workers);
         serverless.push_pod(pod);
         handles.push(handle);

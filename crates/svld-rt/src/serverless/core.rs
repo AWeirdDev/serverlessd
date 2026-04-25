@@ -1,3 +1,4 @@
+use bon::{bon, builder};
 use bytes::Bytes;
 
 use v8::{Platform, SharedRef};
@@ -18,7 +19,7 @@ use crate::{
 /// ```
 #[derive(Debug)]
 pub struct Serverless {
-    pub n_threads: usize,
+    pub n_pods: usize,
     pub n_workers: usize,
 
     pub code_store: CodeStore,
@@ -32,9 +33,16 @@ pub struct Serverless {
     pub vacancies: Vec<usize>,
 }
 
+#[bon]
 impl Serverless {
     /// Create a serverless runtime.
-    pub fn new(n_threads: usize, n_workers: usize) -> Self {
+    #[builder]
+    pub fn new(
+        n_pods: usize,
+        n_workers: usize,
+        parent: Option<&str>,
+        workers_path: Option<&str>,
+    ) -> Self {
         // we gotta initialize the platform first
         let platform = {
             let platform = v8::new_default_platform(0, false).make_shared();
@@ -44,23 +52,31 @@ impl Serverless {
             platform
         };
 
-        let pods = Vec::with_capacity(n_threads);
-        let code_store = CodeStore::new();
+        let pods = Vec::with_capacity(n_pods);
+        let code_store = CodeStore::new(
+            parent.unwrap_or(".serverlessd"),
+            workers_path.unwrap_or("workers"),
+        );
 
         Self {
-            n_threads,
+            n_pods,
             n_workers,
             code_store,
             platform,
             pods,
-            vacancies: Vec::with_capacity(n_threads),
+            vacancies: Vec::with_capacity(n_pods),
         }
     }
 
     /// Create a serverless runtime for one worker only.
     #[inline]
     pub fn new_one() -> Self {
-        Self::new(1, 1)
+        Self::builder()
+            .n_pods(1)
+            .n_workers(1)
+            .parent(".serverlessd")
+            .workers_path("one")
+            .build()
     }
 
     /// Gets a clone of the shared reference from [`v8`].
