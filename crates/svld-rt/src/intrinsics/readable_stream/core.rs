@@ -8,11 +8,14 @@ use svld_language::{ThrowException, throw, type_and_value};
 
 use crate::{
     WorkerState,
-    intrinsics::readable_stream::{
-        block::ReadableStreamBlock,
-        controller::JsDefaultController,
-        source::{UnderlyingSource, UnderlyingSourceParseError},
-        state::{ReadableStreamState, StreamInternalState},
+    intrinsics::{
+        readable_stream::{
+            block::ReadableStreamBlock,
+            controller::JsDefaultController,
+            source::{UnderlyingSource, UnderlyingSourceParseError},
+            state::{ReadableStreamState, StreamInternalState},
+        },
+        retrieve::retrieve_intrinsic,
     },
 };
 
@@ -64,6 +67,12 @@ impl JsReadableStream {
         }
 
         func_tmpl.get_function(scope).map(|func| func.cast())
+    }
+
+    /// Retrieves the `ReadableStream` constructor from the intrinsics object stored in data slot 1.
+    #[inline]
+    pub fn retrieve<'s>(scope: &mut v8::PinScope<'s, '_>) -> Option<Local<'s, v8::Function>> {
+        retrieve_intrinsic(scope, "ReadableStream").map(|k| k.cast())
     }
 
     fn js_constructor(scope: &mut PinScope, args: FunctionCallbackArguments, _rv: ReturnValue) {

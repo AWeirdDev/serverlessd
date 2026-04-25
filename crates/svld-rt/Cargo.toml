@@ -19,3 +19,5 @@ bytes = "1.11.1"
 # custom deps
 svld-language = { path = "../svld-language" }
 typeid = "1.0.3"
+http = "1.4.0"
+bon = "3.9.1"

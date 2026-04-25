@@ -9,7 +9,7 @@ use salvo::{
 };
 use serde_json::json;
 
-use svld_rt::{CreateWorkerError, ServerlessHandle};
+use svld_rt::{CreateWorkerError, ServerlessHandle, WorkerHttpResponse};
 
 use crate::app_security::AuthMiddleware;
 
@@ -141,8 +141,15 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     }
 
     match result {
-        Ok(t) => {
-            res.render(t);
+        Ok(resp) => {
+            let WorkerHttpResponse {
+                status,
+                headers,
+                body,
+            } = resp;
+            res.set_headers(headers);
+            res.status_code(status);
+            res.body(body);
         }
         Err(err) => {
             tracing::error!("got error after worker execution: {err}");

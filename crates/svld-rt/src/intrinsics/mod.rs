@@ -4,6 +4,7 @@ mod files;
 mod point;
 mod readable_stream;
 mod response;
+mod retrieve;
 
 pub(super) use fetch::fetch;
 pub(super) use point::point;

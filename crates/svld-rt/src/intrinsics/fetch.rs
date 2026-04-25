@@ -1,17 +1,16 @@
 use std::str::FromStr;
 
-use crate::blocks::HttpClientBlock;
 use reqwest::{
     Method,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
 use v8::{Global, Local, Object, PromiseResolver};
 
-use svld_language::{ThrowException, throw};
-
-use crate::worker::WorkerState;
+use svld_language::{ThrowException, get_bytes, throw};
 
 use super::response::JsResponse;
+use crate::blocks::HttpClientBlock;
+use crate::worker::WorkerState;
 
 macro_rules! some {
     ($k:expr) => {{
@@ -147,24 +146,8 @@ pub fn fetch(
                 break 'body;
             }
 
-            if body_k.is_string() {
-                let s = some!(body_k.to_string(scope)).to_rust_string_lossy(scope);
-                rq = rq.body(s);
-            } else if body_k.is_array_buffer_view() {
-                let view = body_k.cast::<v8::ArrayBufferView>();
-                let mut buf = vec![0u8; view.byte_length()];
-                view.copy_contents(&mut buf);
-                rq = rq.body(buf);
-            } else if body_k.is_array_buffer() {
-                let ab = body_k.cast::<v8::ArrayBuffer>();
-                let store = ab.get_backing_store();
-                let slice = unsafe {
-                    std::slice::from_raw_parts(
-                        some!(store.data()).as_ptr() as *const u8,
-                        store.byte_length(),
-                    )
-                };
-                rq = rq.body(slice.to_vec());
+            if let Some(bytes) = get_bytes(scope, body_k) {
+                rq = rq.body(bytes);
             }
         }
     }

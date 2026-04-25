@@ -2,10 +2,12 @@ mod blocks;
 mod compile;
 mod intrinsics;
 mod macros;
+mod model;
 mod pod;
 mod serverless;
 mod worker;
 
+pub use crate::model::WorkerHttpResponse;
 pub use crate::pod::*;
 pub use crate::serverless::*;
 pub use crate::worker::*;

@@ -1,6 +1,8 @@
-use std::{ffi::c_void, ptr::NonNull, sync::Arc};
+use std::{ffi::c_void, ptr::NonNull, str::FromStr, sync::Arc};
 
 use super::WorkerError;
+use bytes::Bytes;
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use v8::{
     External, Function, GetPropertyNamesArgs, Global, Local, Module, OwnedIsolate, Platform,
     Promise, SharedRef,
@@ -8,9 +10,10 @@ use v8::{
 
 use crate::{
     blocks::{MaybeReplier, ReplierBlock},
-    intrinsics,
+    intrinsics::{self, JsResponse},
+    model::WorkerHttpResponse,
 };
-use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, throw};
+use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, get_bytes, throw};
 
 use crate::{
     PodTrigger, PodTx, WorkerState, compile, scope_with_context, try_catch,
@@ -366,21 +369,104 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     let promise = result.cast::<v8::Promise>();
 
                     {
-                        // RESOLVE
+                        // == RESOLVE ==
                         let resolve = Function::builder(
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,
                              _rv: v8::ReturnValue| {
                                 // this is a mutable reference, NOT OWNED!!!!!!
+                                // IT'S A &mut!!!11!
                                 let replier = unsafe {
                                     &mut *(args.data().cast::<External>().value()
                                         as *mut MaybeReplier)
                                 };
 
                                 if let Some(replier) = replier.take() {
-                                    tracing::info!("replied to http");
+                                    let result = args.get(0);
+                                    let data = get_bytes(scope, result).unwrap_or(
+                                        Bytes::new(), // this won't allocate
+                                    );
+
+                                    {
+                                        let js_resp = unsafe {
+                                            JsResponse::retrieve(scope).unwrap_unchecked()
+                                        };
+                                        println!(
+                                            "is instance? {:?}",
+                                            result.instance_of(scope, js_resp.cast())
+                                        );
+                                    }
+
+                                    let result = result.cast::<v8::Object>();
+
+                                    let headers = {
+                                        let mut map = HeaderMap::new();
+
+                                        let jsh = result
+                                            .get(
+                                                scope,
+                                                v8::String::new(scope, "headers").unwrap().cast(),
+                                            )
+                                            .unwrap();
+
+                                        if !jsh.is_null_or_undefined() {
+                                            let jsh = jsh.cast::<v8::Object>();
+                                            let names = jsh
+                                                .get_own_property_names(
+                                                    scope,
+                                                    GetPropertyNamesArgs::default(),
+                                                )
+                                                .unwrap();
+
+                                            for idx in 0..names.length() {
+                                                let name = names.get_index(scope, idx).unwrap();
+                                                let item = jsh.get(scope, name).unwrap();
+
+                                                map.insert(
+                                                    HeaderName::from_str(
+                                                        &name
+                                                            .to_string(scope)
+                                                            .unwrap()
+                                                            .to_rust_string_lossy(scope),
+                                                    )
+                                                    .unwrap(),
+                                                    HeaderValue::from_str(
+                                                        &item
+                                                            .to_string(scope)
+                                                            .unwrap()
+                                                            .to_rust_string_lossy(scope),
+                                                    )
+                                                    .unwrap(),
+                                                );
+                                            }
+                                        }
+
+                                        map
+                                    };
+
                                     replier
-                                        .send(Ok(args.get(0).to_rust_string_lossy(scope)))
+                                        .send(Ok(WorkerHttpResponse::builder()
+                                            .body(data)
+                                            .headers(headers)
+                                            .status(
+                                                StatusCode::from_u16(
+                                                    result
+                                                        .get(
+                                                            scope,
+                                                            v8::String::new(scope, "statusCode")
+                                                                .unwrap()
+                                                                .cast(),
+                                                        )
+                                                        .unwrap()
+                                                        .to_number(scope)
+                                                        .unwrap()
+                                                        .int32_value(scope)
+                                                        .unwrap()
+                                                        as u16,
+                                                )
+                                                .unwrap(),
+                                            )
+                                            .build()))
                                         .ok();
                                 }
                             },
@@ -391,7 +477,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     }
 
                     {
-                        // REJECT
+                        // == REJECT ==
                         let reject = Function::builder(
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,

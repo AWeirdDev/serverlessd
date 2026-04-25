@@ -1,9 +1,10 @@
-use std::{ffi::c_void, ptr::NonNull};
-
 use svld_language::{ThrowException, throw};
-use v8::{Global, Local, Value};
+use v8::{FunctionTemplate, Local, Value};
 
-use crate::{intrinsics::readable_stream::JsReadableStream, try_catch};
+use crate::{
+    intrinsics::{readable_stream::JsReadableStream, retrieve::retrieve_intrinsic},
+    try_catch,
+};
 
 pub struct JsResponse;
 
@@ -15,7 +16,9 @@ impl JsResponse {
         ResponseBuilder::new(scope)
     }
 
-    pub fn get_new_fn<'s>(scope: &v8::PinScope<'s, '_>) -> Option<Local<'s, Value>> {
+    pub fn get_fn_template<'s>(
+        scope: &v8::PinScope<'s, '_>,
+    ) -> Option<Local<'s, FunctionTemplate>> {
         let function_template = v8::FunctionTemplate::new(scope, Self::js_constructor);
 
         let name = v8::String::new(scope, "Response")?;
@@ -46,8 +49,12 @@ impl JsResponse {
             }
         }
 
-        let function = function_template.get_function(scope)?;
-        Some(function.cast())
+        Some(function_template)
+    }
+
+    /// Retrieves the `Response` constructor from the intrinsics object stored in data slot 1.
+    pub fn retrieve<'s>(scope: &mut v8::PinScope<'s, '_>) -> Option<Local<'s, v8::Function>> {
+        retrieve_intrinsic(scope, "Response").map(|k| k.cast())
     }
 
     fn js_constructor(
@@ -338,7 +345,7 @@ impl<'s> ResponseBuilder<'s> {
     ) -> Option<Self> {
         let body_k = v8::String::new(scope, "body")?;
 
-        let rs_fn = get_rs_constructor(scope)?;
+        let rs_fn = JsReadableStream::retrieve(scope)?;
         let stream = JsReadableStream::new_with_chunk(scope, rs_fn, data)?;
 
         // Cache raw data for body consumer methods
@@ -437,26 +444,4 @@ impl<'s> ResponseBuilder<'s> {
 
         Some(self.this)
     }
-}
-
-/// Retrieves the `ReadableStream` constructor from the intrinsics object stored in data slot 1.
-fn get_rs_constructor<'s>(scope: &mut v8::PinScope<'s, '_>) -> Option<Local<'s, v8::Function>> {
-    let inner = scope.get_data(1);
-    if inner.is_null() {
-        return None;
-    }
-
-    let ptr = unsafe { NonNull::new_unchecked(inner as *mut v8::Value) };
-    let gintrinsics = unsafe { Global::from_raw(scope, ptr) };
-
-    let preserved = gintrinsics.clone();
-    let intrinsics = Local::new(scope, gintrinsics);
-
-    scope.set_data(1, preserved.into_raw().as_ptr() as *mut c_void);
-    Some(
-        intrinsics
-            .cast::<v8::Object>()
-            .get(scope, v8::String::new(scope, "ReadableStream")?.cast())?
-            .cast::<v8::Function>(),
-    )
 }

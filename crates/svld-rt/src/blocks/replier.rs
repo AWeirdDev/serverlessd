@@ -2,12 +2,12 @@ use std::{cell::OnceCell, ptr::NonNull};
 
 use tokio::sync::oneshot;
 
-use crate::worker::WorkerError;
+use crate::{model::WorkerHttpResponse, worker::WorkerError};
 
 use super::Block;
 
 /// The reply (type) to an HTTP event.
-pub type Reply = Result<String, WorkerError>;
+pub type Reply = Result<WorkerHttpResponse, WorkerError>;
 
 /// The replier to an HTTP event.
 pub type Replier = oneshot::Sender<Reply>;

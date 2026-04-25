@@ -9,7 +9,7 @@ fn add_to_scope<'s>(
     value: Local<'s, v8::Value>,
 ) -> Option<()> {
     let k = v8::String::new(scope, name)?;
-    obj.set(scope, k.into(), value.into());
+    obj.set(scope, k.cast(), value.cast());
 
     Some(())
 }
@@ -39,8 +39,9 @@ pub fn build_intrinsics(isolate: &mut Isolate) -> Option<Global<v8::Value>> {
 
     // Response
     {
-        let rs = intrinsics::JsResponse::get_new_fn(scope)?;
-        add_to_scope(scope, intrinsics_obj, "Response", rs.cast());
+        let rs = intrinsics::JsResponse::get_fn_template(scope)?;
+        let func = rs.get_function(scope)?;
+        add_to_scope(scope, intrinsics_obj, "Response", func.cast());
     }
 
     // dev only
