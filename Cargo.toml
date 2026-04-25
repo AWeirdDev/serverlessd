@@ -15,7 +15,6 @@ serde = "1.0.228"
 tokio-util = { version = "0.7.18", features = ["rt"] }
 sha2 = "0.11.0"
 jsonwebtoken = "10.3.0"
-uuid = { version = "1.23.0", features = ["v4"] }
 hex = "0.4.3"
 dotenvy = "0.15.7"
 async-trait = "0.1.89"

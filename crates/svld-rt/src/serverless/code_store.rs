@@ -56,20 +56,20 @@ impl CodeStore {
     }
 
     /// Check the filesystem.
-    /// If the required directory (`.serverlessd/workers`) does not exist,
+    /// If the required directory for storing workers does not exist,
     /// a new one is created.
+    ///
+    /// Returns the path for storing workers.
     #[inline]
-    pub async fn check_fs(&self) -> PathBuf {
-        let path = self.parent.join("workers/");
-
-        if !path.exists() {
-            fs::create_dir_all(&path).ok();
+    pub async fn check_fs(&self) -> &PathBuf {
+        if !self.workers_path.exists() {
+            fs::create_dir_all(&self.workers_path).ok();
             tokio::fs::write(&self.parent.join(".gitignore"), "*")
                 .await
                 .ok();
         }
 
-        path
+        &self.workers_path
     }
 
     #[inline(always)]

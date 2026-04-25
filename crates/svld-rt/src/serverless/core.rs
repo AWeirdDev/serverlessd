@@ -1,4 +1,4 @@
-use bon::{bon, builder};
+use bon::bon;
 use bytes::Bytes;
 
 use v8::{Platform, SharedRef};
