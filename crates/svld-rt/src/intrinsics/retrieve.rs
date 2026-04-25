@@ -1,4 +1,4 @@
-use std::ptr::NonNull;
+use std::{ffi::c_void, ptr::NonNull};
 
 use v8::{Global, Local};
 
@@ -12,8 +12,12 @@ pub fn retrieve_intrinsic<'s>(
         return None;
     }
 
-    let gintrinsics = unsafe { &*NonNull::new_unchecked(inner as *mut Global<v8::Value>).as_ptr() };
+    let data = unsafe { NonNull::new_unchecked(inner as *mut v8::Value) };
+    let gintrinsics = unsafe { Global::from_raw(scope, data) };
+
+    let preserved = gintrinsics.clone();
     let intrinsics = Local::new(scope, gintrinsics);
+    scope.set_data(1, preserved.into_raw().as_ptr() as *mut c_void);
 
     Some(
         intrinsics

@@ -374,100 +374,115 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                             |scope: &mut v8::PinScope,
                              args: v8::FunctionCallbackArguments,
                              _rv: v8::ReturnValue| {
+                                let inner = |scope: &mut v8::PinScope,
+                                             args: &v8::FunctionCallbackArguments|
+                                 -> Option<WorkerHttpResponse> {
+                                        let result = args.get(0);
+                                        let js_resp = JsResponse::retrieve(scope)?;
+
+                                        if result.instance_of(scope, js_resp.cast())? {
+                                            let result = result.cast::<v8::Object>();
+
+                                            let data = get_bytes(
+                                                scope,
+                                                result
+                                                    .get(
+                                                        scope,
+                                                        v8::String::new(scope, "body")?.cast(),
+                                                    )?,
+                                            )
+                                            .unwrap_or(
+                                                Bytes::new(), // this won't allocate
+                                            );
+
+                                            let headers = {
+                                                let mut map = HeaderMap::new();
+
+                                                let jsh = result
+                                                    .get(
+                                                        scope,
+                                                        v8::String::new(scope, "headers")?.cast(),
+                                                    )?;
+                                                if !jsh.is_null_or_undefined() {
+                                                    let jsh = jsh.cast::<v8::Object>();
+                                                    let names = jsh
+                                                        .get_own_property_names(
+                                                            scope,
+                                                            GetPropertyNamesArgs::default(),
+                                                        )?;
+
+                                                    for idx in 0..names.length() {
+                                                        let name = names.get_index(scope, idx)?;
+                                                        let item = jsh.get(scope, name)?;
+
+                                                        if let Ok(name) = HeaderName::from_str(
+                                                            &name
+                                                                .to_string(scope)?
+                                                                .to_rust_string_lossy(scope),
+                                                        ) &&
+                                                        let Ok(value) = HeaderValue::from_str(
+                                                            &item
+                                                                .to_string(scope)?
+                                                                .to_rust_string_lossy(scope),
+                                                        ) {
+                                                            map.insert(
+                                                                name,
+                                                                value,
+                                                            );
+                                                        }
+                                                    }
+                                                }
+
+                                                map
+                                            };
+
+                                            let status_code = {
+                                                let c = result
+                                                    .get(
+                                                        scope,
+                                                        v8::String::new(scope, "status")?
+                                                            .cast(),
+                                                    )?;
+
+                                                if c.is_null_or_undefined() {
+                                                    200
+                                                } else {
+                                                    c.to_number(scope)?.int32_value(scope)? as u16
+                                                }
+                                            };
+
+                                            Some(WorkerHttpResponse::builder()
+                                                .body(data)
+                                                .headers(headers)
+                                                .status(
+                                                    StatusCode::from_u16(status_code).unwrap_or_default(),
+                                                )
+                                                .build())
+                                        } else {
+                                            None
+                                        }
+
+                                };
+
+                                let response = inner(scope, &args);
+
                                 // this is a mutable reference, NOT OWNED!!!!!!
                                 // IT'S A &mut!!!11!
                                 let replier = unsafe {
                                     &mut *(args.data().cast::<External>().value()
                                         as *mut MaybeReplier)
                                 };
-
-                                if let Some(replier) = replier.take() {
-                                    let result = args.get(0);
-                                    let data = get_bytes(scope, result).unwrap_or(
-                                        Bytes::new(), // this won't allocate
-                                    );
-
-                                    {
-                                        let js_resp = unsafe {
-                                            JsResponse::retrieve(scope).unwrap_unchecked()
-                                        };
-                                        println!(
-                                            "is instance? {:?}",
-                                            result.instance_of(scope, js_resp.cast())
-                                        );
+                                if let Some(replier) = replier.take()
+                                {
+                                    if let Some(resp) = response {
+                                        replier.send(Ok(resp)).ok();
+                                    } else {
+                                        replier.send(
+                                            Err(
+                                                WorkerError::RuntimeError("Unknown runtime error: couldn't get response".to_string())
+                                            )
+                                        ).ok();
                                     }
-
-                                    let result = result.cast::<v8::Object>();
-
-                                    let headers = {
-                                        let mut map = HeaderMap::new();
-
-                                        let jsh = result
-                                            .get(
-                                                scope,
-                                                v8::String::new(scope, "headers").unwrap().cast(),
-                                            )
-                                            .unwrap();
-
-                                        if !jsh.is_null_or_undefined() {
-                                            let jsh = jsh.cast::<v8::Object>();
-                                            let names = jsh
-                                                .get_own_property_names(
-                                                    scope,
-                                                    GetPropertyNamesArgs::default(),
-                                                )
-                                                .unwrap();
-
-                                            for idx in 0..names.length() {
-                                                let name = names.get_index(scope, idx).unwrap();
-                                                let item = jsh.get(scope, name).unwrap();
-
-                                                map.insert(
-                                                    HeaderName::from_str(
-                                                        &name
-                                                            .to_string(scope)
-                                                            .unwrap()
-                                                            .to_rust_string_lossy(scope),
-                                                    )
-                                                    .unwrap(),
-                                                    HeaderValue::from_str(
-                                                        &item
-                                                            .to_string(scope)
-                                                            .unwrap()
-                                                            .to_rust_string_lossy(scope),
-                                                    )
-                                                    .unwrap(),
-                                                );
-                                            }
-                                        }
-
-                                        map
-                                    };
-
-                                    replier
-                                        .send(Ok(WorkerHttpResponse::builder()
-                                            .body(data)
-                                            .headers(headers)
-                                            .status(
-                                                StatusCode::from_u16(
-                                                    result
-                                                        .get(
-                                                            scope,
-                                                            v8::String::new(scope, "statusCode")
-                                                                .unwrap()
-                                                                .cast(),
-                                                        )
-                                                        .unwrap()
-                                                        .to_number(scope)
-                                                        .unwrap()
-                                                        .int32_value(scope)
-                                                        .unwrap()
-                                                        as u16,
-                                                )
-                                                .unwrap(),
-                                            )
-                                            .build()))
-                                        .ok();
                                 }
                             },
                         )
