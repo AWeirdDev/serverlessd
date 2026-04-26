@@ -1,5 +1,7 @@
+mod bindings;
 mod blocks;
 mod compile;
+mod env;
 mod intrinsics;
 mod macros;
 mod model;

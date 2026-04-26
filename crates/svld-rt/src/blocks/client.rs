@@ -2,7 +2,7 @@ use std::cell::OnceCell;
 
 use reqwest::Client;
 
-use super::Block;
+use crate::blocks::Block;
 
 /// An HTTP client extension.
 #[repr(transparent)]

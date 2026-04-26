@@ -15,9 +15,9 @@ tracing = "0.1.44"
 serde = "1.0.228"
 tokio-util = { version = "0.7.18", features = ["rt"] }
 bytes = "1.11.1"
+http = "1.4.0"
+bon = "3.9.1"
 
 # custom deps
 svld-language = { path = "../svld-language" }
 typeid = "1.0.3"
-http = "1.4.0"
-bon = "3.9.1"

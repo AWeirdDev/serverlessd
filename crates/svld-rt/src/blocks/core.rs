@@ -1,3 +1,5 @@
+//! Blocks for attaching to a worker state.
+
 use std::{any::Any, cell::RefCell};
 
 use typeid::ConstTypeId;
@@ -95,6 +97,8 @@ pub trait Block {
     const TYPE: ConstTypeId = ConstTypeId::of::<Self>();
 
     /// Drop the block.
+    ///
+    /// This is automatically implemented.
     fn drop_block_data(slf: Box<dyn Any>)
     where
         Self: Sized + 'static,

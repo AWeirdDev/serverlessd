@@ -91,6 +91,17 @@ impl JsResponse {
                 v8::Number::new(scope, status as f64).cast(),
             );
 
+            let headers = options
+                .and_then(|opt| opt.get(scope, v8::String::new(scope, "headers")?.cast()))
+                .filter(|item| item.is_object() && !item.is_null_or_undefined())
+                .map(|item| item.cast::<v8::Object>())
+                .unwrap_or_else(|| v8::Object::new(scope));
+            this.set(
+                scope,
+                v8::String::new(scope, "headers")?.cast(),
+                headers.cast(),
+            );
+
             let status_text = options
                 .and_then(|opt| opt.get(scope, v8::String::new(scope, "statusText")?.cast()))
                 .filter(|s| s.is_string())

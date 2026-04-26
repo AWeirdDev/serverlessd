@@ -4,9 +4,10 @@ use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
-use crate::blocks::{Blocks, HttpClientBlock, ReplierBlock};
+use crate::blocks::Blocks;
 use svld_language::ThrowException;
 
+use crate::blocks::{HttpClientBlock, ReplierBlock};
 use crate::worker::{MonitorHandle, Monitoring, WorkerTx};
 
 type ResolutionCallback =

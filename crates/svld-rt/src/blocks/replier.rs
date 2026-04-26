@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 
 use crate::{model::WorkerHttpResponse, worker::WorkerError};
 
-use super::Block;
+use crate::blocks::Block;
 
 /// The reply (type) to an HTTP event.
 pub type Reply = Result<WorkerHttpResponse, WorkerError>;

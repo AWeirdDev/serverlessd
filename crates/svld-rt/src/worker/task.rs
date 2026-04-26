@@ -9,7 +9,9 @@ use v8::{
 };
 
 use crate::{
+    bindings,
     blocks::{MaybeReplier, ReplierBlock},
+    env::JsEnv,
     intrinsics::{self, JsResponse},
     model::WorkerHttpResponse,
 };
@@ -583,12 +585,17 @@ async fn init_worker_for_task(
         );
         try_catch!(scope: scope, let try_catch);
 
+        // intrinsics
         let intrinsics_obj = {
             let build_result = intrinsics::build_intrinsics(try_catch);
             unwrap_init(try_catch, build_result)?
         };
-
         try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
+
+        // `env` var
+        let env = JsEnv::builder(try_catch, state.clone())
+            .add_binding(try_catch, "KV", bindings::JsKv::new(".serverlessd/kv"))
+            .map(|item| item.build());
 
         // we're gonna put them in the global
         {
@@ -596,6 +603,14 @@ async fn init_worker_for_task(
             unwrap_init(
                 try_catch,
                 intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj),
+            )?;
+
+            unwrap_init(
+                try_catch,
+                || -> Option<()> {
+                    context_global.set(try_catch, v8::String::new(try_catch, "env")?.cast(), env?);
+                    Some(())
+                }(),
             )?;
         }
 

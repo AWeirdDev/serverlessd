@@ -1,9 +1,11 @@
 export default {
   async fetch() {
-    let res = await fetch("https://httpbin.org/anything");
-    let result = await res.json();
-    return new Response(JSON.stringify(result), {
-      status: 404,
+    env.KV.put("money", "ties");
+    return new Response(env.KV.get("money"), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html",
+      },
     });
   },
 };
