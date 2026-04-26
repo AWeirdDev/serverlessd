@@ -7,7 +7,7 @@ use v8::{
 
 use svld_language::{ThrowException, throw};
 
-use crate::{WorkerState, bindings::Binding, blocks::Block};
+use crate::{WorkerState, bindings::BindingClient, blocks::Block};
 
 /// Key-Value store binding.
 #[allow(unused)]
@@ -105,7 +105,7 @@ impl JsKv {
 
 impl Block for JsKv {}
 
-impl Binding for JsKv {
+impl BindingClient for JsKv {
     fn get_js_value<'s>(scope: &mut PinScope<'s, '_>) -> Option<Local<'s, v8::Value>> {
         let obj = Object::new(scope);
         add_function(scope, obj, "put", Self::js_put)?;

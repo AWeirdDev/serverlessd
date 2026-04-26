@@ -1,5 +1,5 @@
 mod kv;
-mod r#trait;
+mod traits;
 
 pub use kv::JsKv;
-pub use r#trait::Binding;
+pub use traits::BindingClient;

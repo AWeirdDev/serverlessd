@@ -1,6 +1,5 @@
 # Pending
-- [ ] worker custom environment variables
-- [ ] accept `Response`
+- [ ] better model for getting vacancies
 
 # Done
 - [x] add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
@@ -11,3 +10,4 @@
 - [x] URGENT: WORKER GETS REMOVED COMPLETELY AND DOESN'T COUNT AS "SLEEPING," SHOULD ADD STATES FOR WORKERS INSTEAD.
 - [x] fetch
 - [x] `ReadableStream` API
+- [x] accept `Response`

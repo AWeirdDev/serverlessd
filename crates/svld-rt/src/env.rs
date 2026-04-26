@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use v8::{Local, Object, PinScope, Value};
 
-use crate::{WorkerState, bindings::Binding, blocks::Block};
+use crate::{WorkerState, bindings::BindingClient};
 
 /// The JavaScript runtime `env`.
 pub struct JsEnv<'s> {
@@ -22,7 +22,7 @@ impl<'s> JsEnv<'s> {
 
     /// Adds a binding to the `env`.
     #[must_use]
-    pub fn add_binding<B: Binding + Block + 'static>(
+    pub fn add_binding<B: BindingClient + 'static>(
         self,
         scope: &mut PinScope<'s, '_>,
         key: &str,

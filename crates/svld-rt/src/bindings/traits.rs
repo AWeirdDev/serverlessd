@@ -1,9 +1,11 @@
 use v8::{Local, PinScope, Value};
 
+use crate::blocks::Block;
+
 /// A binding.
 ///
 /// Bindings can extend runtime features.
-pub trait Binding {
+pub trait BindingClient: Block {
     /// Gets the JavaScript value of this binding.
     ///
     /// # Returns

@@ -29,8 +29,6 @@ pub struct Serverless {
     // or whatever, if you're happy with it
     pub platform: SharedRef<Platform>,
     pub pods: Vec<PodHandle>,
-
-    pub vacancies: Vec<usize>,
 }
 
 #[bon]
@@ -64,7 +62,6 @@ impl Serverless {
             code_store,
             platform,
             pods,
-            vacancies: Vec::with_capacity(n_pods),
         }
     }
 
