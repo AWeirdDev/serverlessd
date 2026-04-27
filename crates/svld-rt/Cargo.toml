@@ -17,7 +17,10 @@ tokio-util = { version = "0.7.18", features = ["rt"] }
 bytes = "1.11.1"
 http = "1.4.0"
 bon = "3.9.1"
+typeid = "1.0.3"
+ijson = "0.1.6"
+async-trait = "0.1.89"
+sled = "0.34.7"
 
 # custom deps
 svld-language = { path = "../svld-language" }
-typeid = "1.0.3"

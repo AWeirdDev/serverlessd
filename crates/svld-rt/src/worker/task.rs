@@ -1,6 +1,7 @@
 use std::{ffi::c_void, ptr::NonNull, str::FromStr, sync::Arc};
 
 use super::WorkerError;
+use bon::Builder;
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use v8::{
@@ -21,7 +22,7 @@ use crate::{
     PodTrigger, PodTx, WorkerState, compile, scope_with_context, try_catch,
     worker::{
         MonitorHandle, WorkerTx,
-        state::CreateWorkerState,
+        state::CreateWorkerStateArgs,
         trigger::{WorkerRx, WorkerTrigger},
     },
 };
@@ -42,16 +43,29 @@ use crate::{
 /// ```
 #[derive(Debug)]
 pub struct WorkerTask {
-    // TODO: use BTreeMap
+    /// The name of the worker script.
+    pub name: String,
+
+    /// The worker script source.
     pub source: String,
-    pub platform: SharedRef<Platform>,
 }
 
+#[derive(Builder)]
 pub struct WarmUpWorkerArgs {
+    /// A handle to the pod task.
     pub pod_tx: PodTx,
+
+    /// A handle to the worker task.
     pub worker_tx: WorkerTx,
+
+    /// A receiver for the worker task.
     pub worker_rx: WorkerRx,
+
+    /// A handle to the monitor.
     pub monitor_handle: MonitorHandle,
+
+    /// The platform the worker is on.
+    pub platform: SharedRef<Platform>,
 }
 
 pub(super) async fn create_cancel_safe_task(
@@ -60,6 +74,7 @@ pub(super) async fn create_cancel_safe_task(
         worker_tx: tx,
         worker_rx: mut rx,
         monitor_handle,
+        platform,
     }: WarmUpWorkerArgs,
 ) {
     let mut isolate = Box::new(v8::Isolate::new(Default::default()));
@@ -77,15 +92,16 @@ pub(super) async fn create_cancel_safe_task(
 
                 let result = create_task(
                     &mut rx,
-                    InitWorkerArgs {
-                        worker_id: id,
-                        isolate: isolate_ptr,
-                        task,
-                        tx: tx.clone(),
-                        monitor_handle: monitor_handle.clone(),
-                        state_handle: &mut state_handle,
-                        roll_id,
-                    },
+                    InitWorkerArgs::builder()
+                        .worker_id(id)
+                        .isolate(isolate_ptr)
+                        .task(task)
+                        .tx(tx.clone())
+                        .monitor_handle(monitor_handle.clone())
+                        .state_handle(&mut state_handle)
+                        .roll_id(roll_id)
+                        .platform(platform.clone())
+                        .build(),
                 )
                 .await;
                 tracing::info!("task stopped/finished, marking worker as sleeping");
@@ -149,7 +165,7 @@ fn drop_isolate(isolate_ptr: NonNull<OwnedIsolate>) {
     tracing::info!("isolate is shut down.");
 }
 
-#[repr(packed)]
+#[derive(Builder)]
 struct InitWorkerArgs<'a> {
     worker_id: usize,
     isolate: NonNull<OwnedIsolate>,
@@ -158,6 +174,7 @@ struct InitWorkerArgs<'a> {
     monitor_handle: MonitorHandle,
     state_handle: &'a mut Option<Arc<WorkerState>>,
     roll_id: i32,
+    platform: SharedRef<Platform>,
 }
 
 /// Create a task for running this worker.
@@ -553,17 +570,21 @@ async fn init_worker_for_task(
         monitor_handle,
         state_handle,
         roll_id,
+        platform,
     }: InitWorkerArgs<'_>,
 ) -> Result<InitResult, WorkerError> {
-    let WorkerTask { source, platform } = task;
+    let WorkerTask { source, name } = task;
 
-    let Some(state) = WorkerState::create_injected(CreateWorkerState {
-        platform,
-        isolate,
-        worker_id,
-        worker_tx: tx,
-        monitor_handle,
-    })
+    let Some(state) = WorkerState::create_injected(
+        CreateWorkerStateArgs::builder()
+            .isolate(isolate)
+            .monitor_handle(monitor_handle)
+            .worker_id(worker_id)
+            .worker_tx(tx)
+            .worker_name(name)
+            .platform(platform)
+            .build(),
+    )
     .await
     else {
         return Err(WorkerError::Unknown(
@@ -594,7 +615,7 @@ async fn init_worker_for_task(
 
         // `env` var
         let env = JsEnv::builder(try_catch, state.clone())
-            .add_binding(try_catch, "KV", bindings::JsKv::new(".serverlessd/kv"))
+            .add_binding(try_catch, "KV", bindings::JsKv::new())
             .map(|item| item.build());
 
         // we're gonna put them in the global

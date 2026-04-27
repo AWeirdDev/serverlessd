@@ -1,3 +1,4 @@
-mod core;
+mod backend;
+mod client;
 
-pub use core::JsKv;
+pub use client::JsKv;

@@ -2,6 +2,7 @@ use std::{hint, mem};
 
 use tokio::{io, sync::mpsc, task};
 use tokio_util::task::TaskTracker;
+use v8::{Platform, SharedRef};
 
 use crate::{
     Monitor, MonitorHandle, WorkerHandle,
@@ -26,6 +27,7 @@ pub struct Pod {
     pub tx: PodTx,
     pub monitor: MonitorHandle,
     pub tasks: TaskTracker,
+    pub platform: SharedRef<Platform>,
     pub(super) workers: Vec<StatedWorkerHandle>,
 }
 
@@ -35,7 +37,10 @@ impl Pod {
     /// # Returns
     /// `(PodHandle, JoinHandle)`, where the `PodHandle` is for communicating
     /// with the pod task.
-    pub fn start(n_workers: usize) -> (PodHandle, task::JoinHandle<io::Result<()>>) {
+    pub fn start(
+        platform: SharedRef<Platform>,
+        n_workers: usize,
+    ) -> (PodHandle, task::JoinHandle<io::Result<()>>) {
         let (tx, rx) = mpsc::channel::<PodTrigger>(n_workers);
         let pod_handle = PodHandle::new(tx.clone());
 
@@ -50,6 +55,7 @@ impl Pod {
                 v
             },
             tasks: TaskTracker::new(),
+            platform,
             monitor: {
                 let m = Monitor::new();
                 m.start()
@@ -130,7 +136,7 @@ impl Pod {
 
         let stated_handle = unsafe { self.workers.get_mut(worker_id).unwrap_unchecked() };
         if !sleeping {
-            let handle = WorkerHandle::start(self);
+            let handle = WorkerHandle::start_worker(self);
             let stated_handle = unsafe { self.workers.get_mut(worker_id).unwrap_unchecked() };
             stated_handle.replace(StatedWorkerHandle::Running(Some(handle)));
         } else {
@@ -138,6 +144,12 @@ impl Pod {
         }
 
         Some(worker_id)
+    }
+
+    /// Gets a clone of the shared reference from [`v8`].
+    #[inline(always)]
+    pub fn get_platform(&self) -> SharedRef<Platform> {
+        self.platform.clone()
     }
 }
 

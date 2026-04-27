@@ -1,28 +1,27 @@
-use std::{cell::RefCell, collections::HashMap, path::PathBuf};
-
+use tokio::sync::oneshot;
 use v8::{
-    Function, FunctionCallback, FunctionCallbackArguments, Local, MapFnTo, Object, PinScope,
-    ReturnValue,
+    Function, FunctionCallback, FunctionCallbackArguments, Global, Local, MapFnTo, Object,
+    PinScope, PromiseResolver, ReturnValue,
 };
 
 use svld_language::{ThrowException, throw};
 
-use crate::{WorkerState, bindings::BindingClient, blocks::Block};
+use crate::{
+    WorkerState,
+    bindings::{BindingBackendMessage, BindingBackendTx, BindingClient, kv::backend::KvPayload},
+    blocks::Block,
+};
 
 /// Key-Value store binding.
-#[allow(unused)]
+#[repr(transparent)]
 pub struct JsKv {
-    contents: RefCell<HashMap<String, String>>,
-    storage: PathBuf,
+    tx: BindingBackendTx,
 }
 
 impl JsKv {
     #[inline]
-    pub fn new<P: Into<PathBuf>>(storage: P) -> Self {
-        Self {
-            contents: RefCell::new(HashMap::new()),
-            storage: storage.into(),
-        }
+    pub fn new(tx: BindingBackendTx) -> Self {
+        Self { tx }
     }
 
     /// Puts a key from the KV.
@@ -56,9 +55,37 @@ impl JsKv {
                 arg1.to_string(scope)?.to_rust_string_lossy(scope)
             };
 
-            state.blocks.with_block::<Self, _>(move |block| {
-                let mut contents = block.contents.borrow_mut();
-                contents.insert(key, value);
+            let resolver = PromiseResolver::new(scope)?;
+            let gresolver = Global::new(scope, resolver);
+
+            let tx = state
+                .blocks
+                .with_block::<Self, _>(move |block| block.tx.clone())
+                .unwrap();
+
+            let Ok(data) = ijson::to_value(KvPayload::Put { key, value }) else {
+                throw(
+                    scope,
+                    ThrowException::error("failed to create payload internally"),
+                );
+                return None;
+            };
+
+            let state2 = state.clone();
+            state.tasks.spawn_local(async move {
+                let (reply, recv) = oneshot::channel();
+                let message = BindingBackendMessage::builder()
+                    .worker("whatever".to_string())
+                    .data(data)
+                    .replier(reply)
+                    .build();
+
+                tx.send(message).ok();
+                recv.await.ok();
+                state2.schedule_resolution_and_tick(
+                    gresolver,
+                    Ok(Box::new(|scope| v8::undefined(scope).cast())),
+                );
             });
 
             Some(())
@@ -83,18 +110,10 @@ impl JsKv {
                 arg0.to_string(scope)?.to_rust_string_lossy(scope)
             };
 
-            state
+            let tx = state
                 .blocks
-                .with_block::<Self, _>(move |block| -> Option<()> {
-                    let contents = block.contents.borrow();
-                    let data = contents.get(&key);
-
-                    if let Some(data) = data {
-                        rv.set(v8::String::new(scope, data)?.cast());
-                    }
-
-                    Some(())
-                });
+                .with_block::<Self, _>(move |block| block.tx.clone())
+                .unwrap();
 
             Some(())
         };

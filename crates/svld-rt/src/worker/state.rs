@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::VecDeque, ffi::c_void, ptr::NonNull, sync::Arc};
 
+use bon::Builder;
 use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
@@ -19,7 +20,6 @@ type PendingResolution = (Global<PromiseResolver>, ResolutionResult);
 ///
 /// Internally, the state data should be stored in the isolate.
 pub struct WorkerState {
-    // abstractions regarding the fuck ass event loop
     pub tasks: TaskTracker,
     pub pending_resolutions: RefCell<VecDeque<PendingResolution>>,
     pub event_loop_tick: Notify,
@@ -28,11 +28,13 @@ pub struct WorkerState {
     pub platform: SharedRef<Platform>,
     pub monitoring: Monitoring,
     pub blocks: Blocks,
+
+    pub name: String,
 }
 
 /// Parameters for creating a worker state.
-#[repr(packed)]
-pub struct CreateWorkerState {
+#[derive(Builder)]
+pub struct CreateWorkerStateArgs {
     /// The platform the worker is on.
     /// You can obtain this when initializing the platform with `v8`.
     pub platform: SharedRef<Platform>,
@@ -42,6 +44,9 @@ pub struct CreateWorkerState {
 
     /// The ID of the worker.
     pub worker_id: usize,
+
+    /// The name of the worker task.
+    pub worker_name: String,
 
     /// A event dispatcher for the worker.
     pub worker_tx: WorkerTx,
@@ -57,13 +62,14 @@ impl WorkerState {
     /// `isolate` must exist.
     #[inline(always)]
     pub async fn create_injected(
-        CreateWorkerState {
+        CreateWorkerStateArgs {
             platform,
             isolate,
             worker_id,
             worker_tx,
             monitor_handle,
-        }: CreateWorkerState,
+            worker_name,
+        }: CreateWorkerStateArgs,
     ) -> Option<Arc<Self>> {
         let isolate_handle = unsafe { isolate.as_ref() }.thread_safe_handle();
 
@@ -82,6 +88,8 @@ impl WorkerState {
                     .add_block(ReplierBlock::new())
                     .add_block(HttpClientBlock::new())
             },
+
+            name: worker_name,
         });
 
         let item = Arc::clone(&slf);

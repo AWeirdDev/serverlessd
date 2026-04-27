@@ -18,17 +18,19 @@ pub struct WorkerHandle {
 impl WorkerHandle {
     /// Start a new worker.
     #[inline]
-    pub fn start(pod: &Pod) -> Self {
+    pub fn start_worker(pod: &Pod) -> Self {
         let (tx, rx) = mpsc::channel::<WorkerTrigger>(1);
         let monitor_handle = pod.monitor.clone();
 
-        pod.tasks
-            .spawn_local(create_cancel_safe_task(WarmUpWorkerArgs {
-                pod_tx: pod.tx.clone(),
-                worker_tx: tx.clone(),
-                worker_rx: rx,
-                monitor_handle,
-            }));
+        pod.tasks.spawn_local(create_cancel_safe_task(
+            WarmUpWorkerArgs::builder()
+                .pod_tx(pod.tx.clone())
+                .worker_tx(tx.clone())
+                .worker_rx(rx)
+                .monitor_handle(monitor_handle)
+                .platform(pod.get_platform())
+                .build(),
+        ));
 
         Self { tx }
     }

@@ -23,7 +23,7 @@ pub(super) async fn serverless_task(
     // i know, this might be a bit not so memory efficient
     let mut handles = Vec::with_capacity(serverless.n_pods);
     for _ in 0..serverless.n_pods {
-        let (pod, handle) = Pod::start(serverless.n_workers);
+        let (pod, handle) = Pod::start(serverless.get_platform(), serverless.n_workers);
         serverless.push_pod(pod);
         handles.push(handle);
     }
