@@ -1,3 +1,4 @@
+mod binding_store;
 mod code_store;
 mod core;
 mod error;
