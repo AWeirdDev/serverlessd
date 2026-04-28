@@ -41,11 +41,11 @@ Serverless runtime, pods, and workers communicate via message passing, making it
 ```
 
 ## Installation
-Before installation, make sure to read the install script hosted at [is.gd/serverlessd](https://is.gd/serverlessd) via `curl`.
+Before installation, make sure to read the install script hosted at [is.gd/serverlessd](https://svld.aweird.me) via `curl`.
 Then you can install:
 
 ```sh
-curl -fsSL https://is.gd/serverlessd | sh
+curl -fsSL https://svld.aweird.me | sh
 ```
 
 If you still have safety concerns, a safer alternative is to download from the [Releases](https://github.com/AWeirdDev/serverlessd/releases).
