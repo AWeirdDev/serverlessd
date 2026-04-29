@@ -17,14 +17,14 @@ You can use this for:
 - Setting up a lightweight container for running quick scripts
 
 ## Installation
-You can install this via an install script ([is.gd/serverlessd](https://is.gd/serverlessd); you can inspect the code), if you'd like:
+You can install this via an install script ([svld.aweird.me](https://svld.aweird.me); you can inspect the code), if you'd like:
 
 ```sh
 # inspect the code first
-curl -fsSL https://is.gd/serverlessd
+curl -fsSL https://svld.aweird.me
 
 # ...then install
-curl -fsSL https://is.gd/serverlessd | sh
+curl -fsSL https://svld.aweird.me | sh
 ```
 
 <details>
