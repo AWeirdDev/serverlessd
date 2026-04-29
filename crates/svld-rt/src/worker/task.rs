@@ -10,7 +10,6 @@ use v8::{
 };
 
 use crate::{
-    bindings,
     blocks::{MaybeReplier, ReplierBlock},
     env::JsEnv,
     intrinsics::{self, JsResponse},
@@ -614,9 +613,7 @@ async fn init_worker_for_task(
         try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
 
         // `env` var
-        let env = JsEnv::builder(try_catch, state.clone())
-            .add_binding(try_catch, "KV", bindings::JsKv::new())
-            .map(|item| item.build());
+        let env = JsEnv::builder(try_catch, state.clone()).build();
 
         // we're gonna put them in the global
         {
@@ -629,7 +626,7 @@ async fn init_worker_for_task(
             unwrap_init(
                 try_catch,
                 || -> Option<()> {
-                    context_global.set(try_catch, v8::String::new(try_catch, "env")?.cast(), env?);
+                    context_global.set(try_catch, v8::String::new(try_catch, "env")?.cast(), env);
                     Some(())
                 }(),
             )?;

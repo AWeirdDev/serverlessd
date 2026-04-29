@@ -8,11 +8,12 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     str::FromStr,
+    sync::Arc,
 };
 
 use bytes::Bytes;
 use clap::Parser;
-use svld_rt::{Serverless, ServerlessHandle};
+use svld_rt::{BindingStore, Serverless, ServerlessHandle, bindings};
 use tokio::sync::mpsc;
 
 use crate::task::serverless_task;
@@ -285,10 +286,18 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
     }
 }
 
+pub fn start_binding_backends() -> Arc<BindingStore> {
+    Arc::new(BindingStore::new().add_binding(
+        "kv",
+        bindings::kv::KvBackend::new(".serverlessd/_binding_kv.db").unwrap(),
+    ))
+}
+
 async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr, secret: String) {
     let serverless = Serverless::builder()
         .n_workers(n_workers)
         .n_pods(n_workers_per_pod)
+        .binding_store(start_binding_backends())
         .build();
 
     let (_svl, handle) = {

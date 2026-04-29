@@ -1,8 +1,6 @@
 use async_trait::async_trait;
 use tokio::sync::{mpsc, oneshot};
 
-type BindingName = String;
-
 #[repr(packed)]
 #[derive(bon::Builder)]
 pub struct BindingBackendMessage {
@@ -22,8 +20,18 @@ pub type BindingBackendTx = mpsc::UnboundedSender<BindingBackendMessage>;
 /// Backend receiver (intermediate), for receiving requests from **multiple unique workers**.
 pub type BindingBackendRx = mpsc::UnboundedReceiver<BindingBackendMessage>;
 
-/// A binding backend.
+/// A binding backend abstraction.
 #[async_trait]
 pub trait BindingBackend {
+    /// Gets a handle to this backend.
+    fn get_tx(&self) -> BindingBackendTx;
+
+    /// Starts the backend task loop.
     async fn start(&mut self);
+}
+
+/// Creates a binding backend channel.
+#[inline(always)]
+pub fn binding_backend_channel() -> (BindingBackendTx, BindingBackendRx) {
+    mpsc::unbounded_channel()
 }

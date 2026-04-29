@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use tokio::{io, task::JoinHandle};
 
 use svld_rt::{
-    CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx, ServerlessTrigger,
-    WorkerTask,
+    BindingStore, CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx,
+    ServerlessTrigger, WorkerTask, bindings,
 };
 
 use crate::app::start_server;
@@ -16,9 +16,6 @@ pub(super) async fn serverless_task(
     svl_handle: ServerlessHandle,
     secret: String,
 ) {
-    // first, we initialize the filesystem
-    serverless.code_store.check_fs().await;
-
     // now, we gotta start those threads
     // i know, this might be a bit not so memory efficient
     let mut handles = Vec::with_capacity(serverless.n_pods);
@@ -81,7 +78,7 @@ pub(super) async fn serverless_task(
                                         pod_worker_id,
                                         WorkerTask {
                                             source,
-                                            platform: serverless.get_platform(),
+                                            name
                                         }
                                     )
                                     .await;

@@ -19,6 +19,7 @@ pub struct JsKv {
 }
 
 impl JsKv {
+    /// Creates a new JavaScript KV binding client.
     #[inline]
     pub fn new(tx: BindingBackendTx) -> Self {
         Self { tx }

@@ -1,15 +1,12 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::bindings::{BindingBackend, BindingBackendMessage, BindingBackendRx};
-
-/// The backend for the KV binding.
-pub struct KvBackend {
-    rx: BindingBackendRx,
-    path: PathBuf,
-}
+use crate::bindings::{
+    BindingBackend, BindingBackendMessage, BindingBackendRx, BindingBackendTx,
+    binding_backend_channel,
+};
 
 #[derive(Serialize, Deserialize)]
 pub enum KvPayload {
@@ -19,8 +16,42 @@ pub enum KvPayload {
     List { key: String },
 }
 
+/// The backend for the KV binding.
+pub struct KvBackend {
+    tx: BindingBackendTx,
+    rx: BindingBackendRx,
+    path: PathBuf,
+}
+
+impl KvBackend {
+    /// Creates a new key-value store backend.
+    ///
+    /// # Parameters
+    /// - `save_path`: Where to save the KV store.
+    ///
+    /// # Returns
+    /// `Some( KvBackend )` if successful, returns `None` if the database
+    /// path can't be created.
+    #[inline]
+    pub fn new<P: Into<PathBuf>>(save_path: P) -> Option<Self> {
+        let path = save_path.into();
+
+        if path.exists() {
+            fs::create_dir_all(&path).ok()?;
+        }
+
+        let (tx, rx) = binding_backend_channel();
+        Some(Self { tx, rx, path })
+    }
+}
+
 #[async_trait]
 impl BindingBackend for KvBackend {
+    #[inline(always)]
+    fn get_tx(&self) -> BindingBackendTx {
+        self.tx.clone()
+    }
+
     async fn start(&mut self) {
         let db = sled::open(&self.path).expect("failed to open db");
 

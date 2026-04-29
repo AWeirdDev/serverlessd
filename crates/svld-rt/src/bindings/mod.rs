@@ -1,8 +1,13 @@
+//! Bindings to extend worker capabilities.
+
 mod backend;
 mod client_trait;
 mod general;
-mod kv;
 
-pub use backend::{BindingBackend, BindingBackendMessage, BindingBackendRx, BindingBackendTx};
+pub mod kv;
+
+pub use backend::{
+    BindingBackend, BindingBackendMessage, BindingBackendRx, BindingBackendTx,
+    binding_backend_channel,
+};
 pub use client_trait::BindingClient;
-pub use kv::JsKv;

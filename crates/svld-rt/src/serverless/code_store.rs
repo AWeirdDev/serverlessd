@@ -49,10 +49,14 @@ impl CodeStore {
     pub fn new<P: Into<PathBuf>>(parent: P, workers_path: P) -> Self {
         let parent = parent.into();
         let workers_path = parent.join(workers_path.into());
-        Self {
+
+        let store = Self {
             parent,
             workers_path,
-        }
+        };
+        store.check_fs();
+
+        store
     }
 
     /// Check the filesystem.
@@ -61,12 +65,10 @@ impl CodeStore {
     ///
     /// Returns the path for storing workers.
     #[inline]
-    pub async fn check_fs(&self) -> &PathBuf {
+    pub fn check_fs(&self) -> &PathBuf {
         if !self.workers_path.exists() {
             fs::create_dir_all(&self.workers_path).ok();
-            tokio::fs::write(&self.parent.join(".gitignore"), "*")
-                .await
-                .ok();
+            fs::write(&self.parent.join(".gitignore"), "*").ok();
         }
 
         &self.workers_path
@@ -82,7 +84,7 @@ impl CodeStore {
             return Err(CodeStoreError::InvalidName(name));
         }
 
-        let path = self.check_fs().await.join(format!("{}.js", &name));
+        let path = self.check_fs().join(format!("{}.js", &name));
         tokio::fs::write(&path, code)
             .await
             .map_err(|err| CodeStoreError::IoError(err))?;
@@ -92,13 +94,13 @@ impl CodeStore {
 
     #[inline(always)]
     pub async fn remove_worker_code(&self, name: &str) {
-        let path = self.check_fs().await.join(format!("{}.js", &name));
+        let path = self.check_fs().join(format!("{}.js", &name));
         fs::remove_file(path).ok();
     }
 
     #[inline(always)]
     pub async fn get_worker_code(&self, name: &str) -> Option<String> {
-        let path = self.check_fs().await.join(format!("{}.js", &name));
+        let path = self.check_fs().join(format!("{}.js", &name));
         tokio::fs::read_to_string(path).await.ok()
     }
 }

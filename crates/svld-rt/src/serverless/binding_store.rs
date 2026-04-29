@@ -1,63 +1,51 @@
 use std::collections::HashMap;
 
-use tokio::task::JoinHandle;
+use tokio_util::task::TaskTracker;
 
-use crate::bindings::{BindingBackendRx, BindingBackendTx, binding_backend_channel};
-
-struct ActiveBindingBackend {
-    tx: BindingBackendTx,
-    join_handle: JoinHandle<()>,
-}
+use crate::bindings::{BindingBackend, BindingBackendTx};
 
 /// A store containing active bindings.
-#[repr(transparent)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct BindingStore {
-    bindings: HashMap<String, ActiveBindingBackend>,
+    bindings: HashMap<String, BindingBackendTx>,
+    tasks: TaskTracker,
 }
 
 impl BindingStore {
+    /// Creates a blank binding store.
     #[inline(always)]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Adds a bindign to the store.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// let mut store = BindingStore::new();
-    ///
-    /// store.add_binding(
-    ///     "kv",
-    ///     |rx| {
-    ///         tokio::task::spawn(binding_async_task(rx))
-    ///     }
-    /// );
-    /// ```
-    pub fn add_binding<K: ToString>(
+    /// Pushes a binding to the store.
+    pub fn push_binding<K: ToString, B: BindingBackend + Send + 'static>(
         &mut self,
         name: K,
-        invoke: impl FnOnce(BindingBackendRx) -> JoinHandle<()>,
+        mut backend: B,
     ) {
-        let (tx, rx) = binding_backend_channel();
-        self.bindings.insert(
-            name.to_string(),
-            ActiveBindingBackend {
-                tx,
-                join_handle: invoke(rx),
-            },
-        );
+        let tx = backend.get_tx();
+
+        self.bindings.insert(name.to_string(), tx);
+        self.tasks.spawn(async move {
+            backend.start().await;
+        });
     }
 
+    /// Adds a binding, then returns `Self`.
     #[inline]
-    pub fn with_binding<K: ToString>(
+    pub fn add_binding<K: ToString, B: BindingBackend + Send + 'static>(
         mut self,
         name: K,
-        invoke: impl FnOnce(BindingBackendRx) -> JoinHandle<()>,
+        backend: B,
     ) -> Self {
-        self.add_binding(name, invoke);
+        self.push_binding(name, backend);
         self
+    }
+
+    /// Gets a handle to the binding backend.
+    #[inline(always)]
+    pub fn get_binding_tx<K: AsRef<str>>(&self, name: K) -> Option<BindingBackendTx> {
+        self.bindings.get(name.as_ref()).map(|item| item.clone())
     }
 }

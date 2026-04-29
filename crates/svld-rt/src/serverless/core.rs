@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bon::bon;
 use bytes::Bytes;
 
@@ -5,7 +7,10 @@ use v8::{Platform, SharedRef};
 
 use crate::{
     PodHandle,
-    serverless::code_store::{CodeStore, CodeStoreError},
+    serverless::{
+        binding_store::BindingStore,
+        code_store::{CodeStore, CodeStoreError},
+    },
 };
 
 /// The serverless runtime, as an application.
@@ -23,6 +28,7 @@ pub struct Serverless {
     pub n_workers: usize,
 
     pub code_store: CodeStore,
+    pub binding_store: Arc<BindingStore>,
 
     // why the fuck is this super fucking big???
     // like, fucking 16 bytes
@@ -40,6 +46,7 @@ impl Serverless {
         n_workers: usize,
         parent: Option<&str>,
         workers_path: Option<&str>,
+        binding_store: Arc<BindingStore>,
     ) -> Self {
         // we gotta initialize the platform first
         let platform = {
@@ -62,6 +69,7 @@ impl Serverless {
             code_store,
             platform,
             pods,
+            binding_store,
         }
     }
 
@@ -73,6 +81,7 @@ impl Serverless {
             .n_workers(1)
             .parent(".serverlessd")
             .workers_path("one")
+            .binding_store(Arc::new(BindingStore::new()))
             .build()
     }
 
