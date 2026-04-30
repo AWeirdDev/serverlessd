@@ -1,11 +1,11 @@
-use std::{hint, mem};
+use std::{hint, mem, sync::Arc};
 
 use tokio::{io, sync::mpsc, task};
 use tokio_util::task::TaskTracker;
 use v8::{Platform, SharedRef};
 
 use crate::{
-    Monitor, MonitorHandle, WorkerHandle,
+    BindingStore, Monitor, MonitorHandle, WorkerHandle,
     pod::{PodTrigger, handle::PodHandle, task::pod_task, trigger::PodTx},
 };
 
@@ -28,6 +28,7 @@ pub struct Pod {
     pub monitor: MonitorHandle,
     pub tasks: TaskTracker,
     pub platform: SharedRef<Platform>,
+    pub binding_store: Arc<BindingStore>,
     pub(super) workers: Vec<StatedWorkerHandle>,
 }
 
@@ -39,6 +40,7 @@ impl Pod {
     /// with the pod task.
     pub fn start(
         platform: SharedRef<Platform>,
+        binding_store: Arc<BindingStore>,
         n_workers: usize,
     ) -> (PodHandle, task::JoinHandle<io::Result<()>>) {
         let (tx, rx) = mpsc::channel::<PodTrigger>(n_workers);
@@ -60,6 +62,7 @@ impl Pod {
                 let m = Monitor::new();
                 m.start()
             },
+            binding_store,
         };
 
         let join_handle = {
@@ -150,6 +153,12 @@ impl Pod {
     #[inline(always)]
     pub fn get_platform(&self) -> SharedRef<Platform> {
         self.platform.clone()
+    }
+
+    /// Gets a clone of the binding store from the serverless runtime.
+    #[inline(always)]
+    pub fn get_binding_store(&self) -> Arc<BindingStore> {
+        self.binding_store.clone()
     }
 }
 

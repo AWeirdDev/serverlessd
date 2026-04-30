@@ -93,13 +93,17 @@ impl BindingBackend for KvBackend {
                 }
 
                 KvPayload::Delete { key } => {
-                    replier.send(ijson::ijson!({"success": tree.remove(key).is_ok()}));
+                    replier
+                        .send(ijson::ijson!({"success": tree.remove(key).is_ok()}))
+                        .ok();
                 }
 
                 KvPayload::Put { key, value } => {
-                    replier.send(
-                        ijson::ijson!({"success": tree.insert(key, value.as_bytes()).is_ok()}),
-                    );
+                    replier
+                        .send(
+                            ijson::ijson!({"success": tree.insert(key, value.as_bytes()).is_ok()}),
+                        )
+                        .ok();
                 }
 
                 _ => (),

@@ -1,4 +1,4 @@
-mod bindings;
+// private modules
 mod blocks;
 mod compile;
 mod env;
@@ -8,6 +8,9 @@ mod model;
 mod pod;
 mod serverless;
 mod worker;
+
+// public modules
+pub mod bindings;
 
 pub use crate::model::WorkerHttpResponse;
 pub use crate::pod::*;

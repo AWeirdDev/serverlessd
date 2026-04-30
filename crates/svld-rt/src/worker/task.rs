@@ -10,6 +10,7 @@ use v8::{
 };
 
 use crate::{
+    BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
     env::JsEnv,
     intrinsics::{self, JsResponse},
@@ -65,6 +66,9 @@ pub struct WarmUpWorkerArgs {
 
     /// The platform the worker is on.
     pub platform: SharedRef<Platform>,
+
+    /// The binding store.
+    pub binding_store: Arc<BindingStore>,
 }
 
 pub(super) async fn create_cancel_safe_task(
@@ -74,6 +78,7 @@ pub(super) async fn create_cancel_safe_task(
         worker_rx: mut rx,
         monitor_handle,
         platform,
+        binding_store,
     }: WarmUpWorkerArgs,
 ) {
     let mut isolate = Box::new(v8::Isolate::new(Default::default()));
@@ -100,6 +105,7 @@ pub(super) async fn create_cancel_safe_task(
                         .state_handle(&mut state_handle)
                         .roll_id(roll_id)
                         .platform(platform.clone())
+                        .binding_store(binding_store.clone())
                         .build(),
                 )
                 .await;
@@ -174,6 +180,7 @@ struct InitWorkerArgs<'a> {
     state_handle: &'a mut Option<Arc<WorkerState>>,
     roll_id: i32,
     platform: SharedRef<Platform>,
+    binding_store: Arc<BindingStore>,
 }
 
 /// Create a task for running this worker.
@@ -570,6 +577,7 @@ async fn init_worker_for_task(
         state_handle,
         roll_id,
         platform,
+        binding_store,
     }: InitWorkerArgs<'_>,
 ) -> Result<InitResult, WorkerError> {
     let WorkerTask { source, name } = task;
@@ -582,6 +590,7 @@ async fn init_worker_for_task(
             .worker_tx(tx)
             .worker_name(name)
             .platform(platform)
+            .binding_store(binding_store.clone())
             .build(),
     )
     .await
@@ -605,31 +614,47 @@ async fn init_worker_for_task(
         );
         try_catch!(scope: scope, let try_catch);
 
-        // intrinsics
-        let intrinsics_obj = {
-            let build_result = intrinsics::build_intrinsics(try_catch);
-            unwrap_init(try_catch, build_result)?
-        };
-        try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
-
-        // `env` var
-        let env = JsEnv::builder(try_catch, state.clone()).build();
-
-        // we're gonna put them in the global
         {
             let context_global = context.global(try_catch);
-            unwrap_init(
-                try_catch,
-                intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj),
-            )?;
 
-            unwrap_init(
-                try_catch,
-                || -> Option<()> {
-                    context_global.set(try_catch, v8::String::new(try_catch, "env")?.cast(), env);
-                    Some(())
-                }(),
-            )?;
+            // intrinsics
+            {
+                let intrinsics_obj = {
+                    let build_result = intrinsics::build_intrinsics(try_catch);
+                    unwrap_init(try_catch, build_result)?
+                };
+                try_catch.set_data(1, intrinsics_obj.clone().into_raw().as_ptr() as *mut c_void);
+
+                unwrap_init(
+                    try_catch,
+                    intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj),
+                )?;
+            }
+
+            // env
+            {
+                let env = {
+                    let mut env = JsEnv::new(try_catch, state.clone());
+
+                    for (name, binding) in binding_store.list() {
+                        // env.push_binding(try_catch, name, binding.clone());
+                    }
+
+                    env.get_js_value()
+                };
+
+                unwrap_init(
+                    try_catch,
+                    || -> Option<()> {
+                        context_global.set(
+                            try_catch,
+                            v8::String::new(try_catch, "env")?.cast(),
+                            env,
+                        );
+                        Some(())
+                    }(),
+                )?;
+            }
         }
 
         let module = unwrap_compilation(

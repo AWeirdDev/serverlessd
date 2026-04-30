@@ -29,6 +29,7 @@ impl WorkerHandle {
                 .worker_rx(rx)
                 .monitor_handle(monitor_handle)
                 .platform(pod.get_platform())
+                .binding_store(pod.binding_store.clone())
                 .build(),
         ));
 

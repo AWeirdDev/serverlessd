@@ -5,6 +5,7 @@ use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
+use crate::BindingStore;
 use crate::blocks::Blocks;
 use svld_language::ThrowException;
 
@@ -30,6 +31,7 @@ pub struct WorkerState {
     pub blocks: Blocks,
 
     pub name: String,
+    pub binding_store: Arc<BindingStore>,
 }
 
 /// Parameters for creating a worker state.
@@ -53,6 +55,9 @@ pub struct CreateWorkerStateArgs {
 
     /// The monitor handle.
     pub monitor_handle: MonitorHandle,
+
+    /// The binding store.
+    pub binding_store: Arc<BindingStore>,
 }
 
 impl WorkerState {
@@ -69,6 +74,7 @@ impl WorkerState {
             worker_tx,
             monitor_handle,
             worker_name,
+            binding_store,
         }: CreateWorkerStateArgs,
     ) -> Option<Arc<Self>> {
         let isolate_handle = unsafe { isolate.as_ref() }.thread_safe_handle();
@@ -90,6 +96,7 @@ impl WorkerState {
             },
 
             name: worker_name,
+            binding_store,
         });
 
         let item = Arc::clone(&slf);

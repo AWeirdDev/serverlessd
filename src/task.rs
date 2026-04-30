@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use tokio::{io, task::JoinHandle};
 
 use svld_rt::{
-    BindingStore, CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx,
-    ServerlessTrigger, WorkerTask, bindings,
+    CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx, ServerlessTrigger,
+    WorkerTask,
 };
 
 use crate::app::start_server;
@@ -20,7 +20,11 @@ pub(super) async fn serverless_task(
     // i know, this might be a bit not so memory efficient
     let mut handles = Vec::with_capacity(serverless.n_pods);
     for _ in 0..serverless.n_pods {
-        let (pod, handle) = Pod::start(serverless.get_platform(), serverless.n_workers);
+        let (pod, handle) = Pod::start(
+            serverless.get_platform(),
+            serverless.binding_store.clone(),
+            serverless.n_workers,
+        );
         serverless.push_pod(pod);
         handles.push(handle);
     }

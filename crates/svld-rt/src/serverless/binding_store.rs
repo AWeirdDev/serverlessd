@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map};
 
 use tokio_util::task::TaskTracker;
 
@@ -47,5 +47,11 @@ impl BindingStore {
     #[inline(always)]
     pub fn get_binding_tx<K: AsRef<str>>(&self, name: K) -> Option<BindingBackendTx> {
         self.bindings.get(name.as_ref()).map(|item| item.clone())
+    }
+
+    /// Lists all bindings.
+    #[inline(always)]
+    pub fn list(&self) -> hash_map::Iter<'_, String, BindingBackendTx> {
+        self.bindings.iter()
     }
 }
