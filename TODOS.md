@@ -1,4 +1,5 @@
 # Pending
+- [ ] **MORE** idiomatic rust; **LESS** weird booleans and `#[must_use]`
 - [ ] better model for getting vacancies
 
 # Done
