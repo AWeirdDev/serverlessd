@@ -372,13 +372,10 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     let replier_handle = Box::new(Some(reply));
 
                     let replier_ptr = Box::into_raw(replier_handle);
-                    unsafe {
-                        state
-                            .blocks
-                            .with_block_unchecked::<ReplierBlock, _>(move |shell| {
-                                shell.set_replier(replier_ptr);
-                            })
-                    };
+
+                    state.blocks.with_block::<ReplierBlock, _>(move |shell| {
+                        shell.set_replier(replier_ptr);
+                    });
 
                     // next: call
                     state.tick_monitoring();
@@ -632,29 +629,19 @@ async fn init_worker_for_task(
             }
 
             // env
-            {
-                let env = {
-                    let mut env = JsEnv::new(try_catch, state.clone());
-
-                    for (name, binding) in binding_store.list() {
-                        // env.push_binding(try_catch, name, binding.clone());
-                    }
-
-                    env.get_js_value()
-                };
-
-                unwrap_init(
-                    try_catch,
-                    || -> Option<()> {
-                        context_global.set(
-                            try_catch,
-                            v8::String::new(try_catch, "env")?.cast(),
-                            env,
-                        );
-                        Some(())
-                    }(),
-                )?;
-            }
+            // {
+            //     unwrap_init(
+            //         try_catch,
+            //         || -> Option<()> {
+            //             context_global.set(
+            //                 try_catch,
+            //                 v8::String::new(try_catch, "env")?.cast(),
+            //                 env,
+            //             );
+            //             Some(())
+            //         }(),
+            //     )?;
+            // }
         }
 
         let module = unwrap_compilation(

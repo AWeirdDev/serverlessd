@@ -97,14 +97,13 @@ pub fn fetch(
         Method::GET
     };
 
-    let mut rq = unsafe {
-        state
-            .blocks
-            .with_block_unchecked::<HttpClientBlock, _>(move |block| {
-                block.add_client();
-                block.get_client().unwrap().request(method, url)
-            })
-    };
+    let mut rq = state
+        .blocks
+        .with_block::<HttpClientBlock, _>(move |block| {
+            block.add_client();
+            block.get_client().unwrap().request(method, url)
+        })
+        .unwrap();
 
     // we gotta parse some fucking options now
     if has_options {

@@ -68,12 +68,6 @@ impl Blocks {
             .map(|item| callback(item))
     }
 
-    /// Runs callback on the block of type `T` without checking availability.
-    #[inline(always)]
-    pub unsafe fn with_block_unchecked<T: 'static, R>(&self, callback: impl FnOnce(&T) -> R) -> R {
-        unsafe { self.with_block::<T, R>(callback).unwrap_unchecked() }
-    }
-
     /// Checks if a block exists.
     pub fn has_block<T: 'static>(&self) -> bool {
         let id = ConstTypeId::of::<T>();
@@ -103,6 +97,6 @@ pub trait Block {
     where
         Self: Sized + 'static,
     {
-        let _ = unsafe { slf.downcast::<Self>().unwrap_unchecked() };
+        let _ = slf.downcast::<Self>().unwrap();
     }
 }

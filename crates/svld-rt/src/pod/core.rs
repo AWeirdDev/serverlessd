@@ -137,10 +137,10 @@ impl Pod {
     pub(super) fn create_and_warmup_worker(&mut self) -> Option<usize> {
         let (worker_id, sleeping) = self.find_available_worker_spot()?;
 
-        let stated_handle = unsafe { self.workers.get_mut(worker_id).unwrap_unchecked() };
+        let stated_handle = self.workers.get_mut(worker_id).unwrap();
         if !sleeping {
             let handle = WorkerHandle::start_worker(self);
-            let stated_handle = unsafe { self.workers.get_mut(worker_id).unwrap_unchecked() };
+            let stated_handle = self.workers.get_mut(worker_id).unwrap();
             stated_handle.replace(StatedWorkerHandle::Running(Some(handle)));
         } else {
             stated_handle.mark_as_running();

@@ -35,7 +35,7 @@ impl Block for ReadableStreamBlock {
     where
         Self: Sized + 'static,
     {
-        let slf = unsafe { slf.downcast::<Self>().unwrap_unchecked() };
+        let slf = slf.downcast::<Self>().unwrap();
 
         let mut ptrs = slf.ptrs.borrow_mut();
         ptrs.drain(..).for_each(|ptr| {

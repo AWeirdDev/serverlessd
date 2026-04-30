@@ -9,7 +9,7 @@ use svld_language::{ThrowException, throw};
 use crate::intrinsics::readable_stream::{ReadableStreamState, StreamInternalState};
 
 #[inline(always)]
-fn get_state<'a>(args: &'a FunctionCallbackArguments) -> &'a mut ReadableStreamState {
+fn get_state<'s>(args: &FunctionCallbackArguments<'s>) -> &'s mut ReadableStreamState {
     unsafe { &mut *(args.data().cast::<External>().value() as *mut _) }
 }
 

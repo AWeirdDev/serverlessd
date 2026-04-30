@@ -17,6 +17,9 @@ fn get_validate_regex() -> &'static Regex {
                     .expect("failed to compile worker name validation regex"),
             )
             .ok();
+
+        // this is probably going to be used many times;
+        // we'll use unwrap_unchecked() here
         unsafe { VALIDATE_REGEX.get().unwrap_unchecked() }
     }
 }

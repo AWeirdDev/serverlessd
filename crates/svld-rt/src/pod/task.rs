@@ -15,7 +15,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
             }
 
             PodTrigger::WarmUpWorker { reply } => {
-                let id = unsafe { pod.create_and_warmup_worker().unwrap_unchecked() };
+                let id = pod.create_and_warmup_worker().unwrap();
                 reply.send(id).ok();
             }
 

@@ -72,7 +72,7 @@ impl Block for ReplierBlock {
     where
         Self: Sized + 'static,
     {
-        let slf = unsafe { slf.downcast::<Self>().unwrap_unchecked() };
+        let slf = slf.downcast::<Self>().unwrap();
 
         let mut maybe_replier = slf.replier.get();
 
