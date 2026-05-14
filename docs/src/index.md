@@ -1,8 +1,12 @@
 # serverlessd
 
+![GitHub Release](https://img.shields.io/github/v/release/AWeirdDev/serverlessd)
+
 A lightweight serverless worker runtime.
 
-A **serverless worker** is a fast, minimal environment that runs small event-driven functions on demand, without requiring users/developers to manage servers.
+To put it simply, a **serverless worker** is a fast, minimal environment that runs small event-driven functions on demand, without requiring users/developers to manage servers. And thus the job of a **serverless runtime** is to make those workers possible and safe.
+
+This project aims to be a simple, reliable, and extensible serverless runtime.
 
 ## Architecture
 Overall, the architecture is self-explanatory. Within a Serverless Runtime, there can be numerous workers, and each worker consists of two threads: the **Monitor Thread** and the **Worker Thread**.

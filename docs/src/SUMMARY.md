@@ -1,4 +1,8 @@
 # Summary
 
-- [Introduction](./index.md)
-- [Worker Scripts](./worker-scripts.md)
+[Home](./index.md)
+
+---
+
+# Scripting
+- [Worker scripts](./scripting/index.md)
