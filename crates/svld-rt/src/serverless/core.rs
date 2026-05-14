@@ -101,9 +101,9 @@ impl Serverless {
             if pod.has_vacancies().await {
                 tracing::info!("found pod {} has a vacancy!", pod_id);
 
-                let pod_worker_id = pod.create_and_warmup_worker().await?;
-
-                return Some((pod.clone(), pod_id, pod_worker_id));
+                if let Ok(pod_worker_id) = pod.create_and_warmup_worker().await {
+                    return Some((pod.clone(), pod_id, pod_worker_id));
+                }
             }
         }
         None
@@ -114,28 +114,25 @@ impl Serverless {
         self.pods.get(id)
     }
 
-    /// Push a pod handle to the serverless runtime.
+    /// Pushes a pod handle to the serverless runtime.
     #[inline(always)]
     pub fn push_pod(&mut self, pod_handle: PodHandle) {
         self.pods.push(pod_handle);
     }
 
-    /// Stop all pods.
+    /// Stops all pods.
     pub async fn kill(&mut self) {
         for pod in self.pods.drain(..) {
-            if !pod.kill().await {
+            if pod.kill().await.is_err() {
                 tracing::error!("failed to halt");
             }
         }
     }
 
-    /// Stop a pod.
-    #[allow(unused)]
-    pub async fn kill_pod(&mut self, id: usize) -> bool {
+    /// Stops a pod.
+    pub async fn kill_pod(&mut self, id: usize) {
         if let Some(pod) = self.pods.get_mut(id) {
-            pod.kill().await
-        } else {
-            false
+            let _ = pod.kill().await;
         }
     }
 
@@ -148,7 +145,7 @@ impl Serverless {
         self.code_store.upload_worker_code(name, code).await
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn remove_worker_code(&mut self, name: &str) {
         self.code_store.remove_worker_code(name).await;
     }

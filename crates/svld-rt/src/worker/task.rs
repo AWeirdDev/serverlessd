@@ -12,7 +12,6 @@ use v8::{
 use crate::{
     BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
-    env::JsEnv,
     intrinsics::{self, JsResponse},
     model::WorkerHttpResponse,
 };

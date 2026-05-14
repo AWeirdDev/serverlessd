@@ -77,7 +77,7 @@ pub(super) async fn serverless_task(
                                     continue;
                                 };
 
-                                let success =
+
                                     pod_handle.assign_worker_task(
                                         pod_worker_id,
                                         WorkerTask {
@@ -87,9 +87,9 @@ pub(super) async fn serverless_task(
                                     )
                                     .await;
 
-                                if success {
-                                    reply.send(Ok((pod_id, pod_worker_id))).ok();
-                                }
+
+                                reply.send(Ok((pod_id, pod_worker_id))).ok();
+
 
                                 tracing::info!("done with creating worker task");
                             }
@@ -100,8 +100,7 @@ pub(super) async fn serverless_task(
                             }
 
                             ServerlessTrigger::UploadWorkerCode { name, code, reply } => {
-                                let err = serverless.upload_worker_code(name, code).await.err();
-                                reply.send(err).ok();
+                                reply.send(serverless.upload_worker_code(name, code).await).ok();
                             }
 
                             ServerlessTrigger::RemoveWorkerCode { name } => {

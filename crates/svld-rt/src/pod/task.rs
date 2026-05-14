@@ -47,12 +47,7 @@ pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
             }
 
             PodTrigger::RemoveWorker { id } => {
-                if !pod.remove_worker(id) {
-                    tracing::warn!(
-                        "failed to remove worker of id: {}, probably already slept",
-                        id
-                    );
-                }
+                pod.remove_worker(id);
             }
         }
     }

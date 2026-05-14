@@ -69,7 +69,7 @@ async fn wildcard() -> &'static str {
 }
 
 #[handler]
-async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
+async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
     let name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
 
@@ -78,27 +78,27 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
         Err(err) => {
             match err {
                 CreateWorkerError::UnknownWorker(_) => {
-                    res.status_code(StatusCode::NOT_FOUND);
-                    res.add_header(
+                    resp.status_code(StatusCode::NOT_FOUND);
+                    resp.add_header(
                         HeaderName::from_static("content-type"),
                         HeaderValue::from_static("text/html"),
                         true,
                     )
                     .ok();
-                    res.render(NotFoundTemplate.to_string());
+                    resp.render(NotFoundTemplate.to_string());
                 }
 
                 CreateWorkerError::CannotCreateTask(reason) => {
                     tracing::error!("failed to create task; reason: {reason}");
 
-                    res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-                    res.add_header(
+                    resp.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+                    resp.add_header(
                         HeaderName::from_static("content-type"),
                         HeaderValue::from_static("text/html"),
                         true,
                     )
                     .ok();
-                    res.render(
+                    resp.render(
                         ErrorTemplate {
                             reasoning: "We couldn't allocate any space for your worker. That's fucked up.",
                         }
@@ -112,19 +112,19 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     };
 
     tracing::info!("sending http to worker");
-    let Some(result) = state
+    let Ok(result) = state
         .serverless
         .send_http_to_worker(pod_id, worker_id)
         .await
     else {
-        res.add_header(
+        resp.add_header(
             HeaderName::from_static("content-type"),
             HeaderValue::from_static("text/html"),
             true,
         )
         .ok();
 
-        res.render(
+        resp.render(
             ErrorTemplate {
                 reasoning: "Failed to execute worker; an unknown error occurred.",
             }
@@ -134,34 +134,33 @@ async fn worker(req: &mut Request, res: &mut Response, depot: &Depot) {
     };
 
     {
-        let success = state.serverless.halt_task(pod_id, worker_id).await;
-        if !success {
+        let res = state.serverless.halt_task(pod_id, worker_id).await;
+        if res.is_err() {
             tracing::error!("failed to halt task after http is done");
         }
     }
 
     match result {
-        Ok(resp) => {
-            let WorkerHttpResponse {
-                status,
-                headers,
-                body,
-            } = resp;
-            res.set_headers(headers);
-            res.status_code(status);
-            res.body(body);
+        Ok(WorkerHttpResponse {
+            status,
+            headers,
+            body,
+        }) => {
+            resp.set_headers(headers);
+            resp.status_code(status);
+            resp.body(body);
         }
         Err(err) => {
             tracing::error!("got error after worker execution: {err}");
 
-            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-            res.add_header(
+            resp.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+            resp.add_header(
                 HeaderName::from_static("content-type"),
                 HeaderValue::from_static("text/html"),
                 true,
             )
             .ok();
-            res.render(
+            resp.render(
                 ErrorTemplate {
                     reasoning: &err.to_string(),
                 }
@@ -191,7 +190,7 @@ async fn api_upload_worker(req: &mut Request, res: &mut Response, depot: &Depot)
         .upload_worker(worker_name, worker_bytes)
         .await;
 
-    if let Some(err) = result {
+    if let Err(err) = result {
         res.render(errored(err.to_string()));
     } else {
         res.render(Json(json!({"ok": true})));
@@ -199,12 +198,17 @@ async fn api_upload_worker(req: &mut Request, res: &mut Response, depot: &Depot)
 }
 
 #[handler]
-async fn api_remove_worker(req: &mut Request, res: &mut Response, depot: &Depot) {
+async fn api_remove_worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
     let worker_name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
-    state.serverless.remove_worker_code(worker_name).await;
 
-    res.render(Json(json!({"ok": true})));
+    let res = state.serverless.remove_worker_code(worker_name).await;
+    if res.is_err() {
+        resp.render(Json(json!({"ok": true})));
+        return;
+    }
+
+    resp.render(Json(json!({"ok": true})));
 }
 
 #[inline(always)]

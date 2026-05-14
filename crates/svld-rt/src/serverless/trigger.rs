@@ -16,7 +16,7 @@ pub enum ServerlessTrigger {
     UploadWorkerCode {
         name: String,
         code: Bytes,
-        reply: oneshot::Sender<Option<CodeStoreError>>,
+        reply: oneshot::Sender<Result<(), CodeStoreError>>,
     },
 
     RemoveWorkerCode {

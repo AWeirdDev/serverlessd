@@ -27,26 +27,25 @@ impl PodHandle {
     /// 2. Kills the worker
     ///
     /// This enables graceful canceling.
-    ///
-    /// # Returns
-    /// A boolean indicating whether the operation was successful.
-    #[must_use]
-    pub async fn kill(&self) -> bool {
+    pub async fn kill(&self) -> Result<(), PodTriggerError> {
         let (token, recv) = oneshot::channel();
 
-        if !self.tx.send(PodTrigger::Kill { token }).await.is_ok() {
+        if let Err(err) = self.trigger(PodTrigger::Kill { token }).await {
             tracing::error!("failed to kill pod");
-            return false;
+            return Err(err);
         }
 
-        recv.await.is_ok()
+        recv.await.map_err(|_| PodTriggerError::ChannelClosed)
     }
 
-    /// Checks whether or not this pod has any vacancies to run
-    /// a task.
+    /// Checks whether or not this pod has any vacancies to run a task.
     pub async fn has_vacancies(&self) -> bool {
         let (reply, recv) = oneshot::channel();
-        if !self.trigger(PodTrigger::CheckVacancies { reply }).await {
+        if self
+            .trigger(PodTrigger::CheckVacancies { reply })
+            .await
+            .is_err()
+        {
             return false;
         }
 
@@ -54,45 +53,37 @@ impl PodHandle {
     }
 
     /// Creates and warms up a worker.
-    ///
-    /// # Returns
-    /// `Some(worker_id)` if successful.
-    pub async fn create_and_warmup_worker(&self) -> Option<usize> {
+    pub async fn create_and_warmup_worker(&self) -> Result<usize, PodTriggerError> {
         let (reply, receive) = oneshot::channel::<usize>();
-        if !self.trigger(PodTrigger::WarmUpWorker { reply }).await {
-            return None;
-        }
+        self.trigger(PodTrigger::WarmUpWorker { reply }).await?;
 
-        receive.await.ok()
+        receive.await.map_err(|_| PodTriggerError::ChannelClosed)
     }
 
-    /// Assigns a worker a task.
-    ///
-    /// # Returns
-    /// A boolean indicating whether the operation was successful.
-    #[must_use]
+    /// Assigns a task to a worker.
     #[inline]
-    pub async fn assign_worker_task(&self, id: usize, task: WorkerTask) -> bool {
-        self.trigger(PodTrigger::ToWorker {
-            id,
-            trigger: WorkerTrigger::StartTask { id, task },
-        })
-        .await
+    pub async fn assign_worker_task(&self, id: usize, task: WorkerTask) {
+        let _ = self
+            .trigger(PodTrigger::ToWorker {
+                id,
+                trigger: WorkerTrigger::StartTask { id, task },
+            })
+            .await;
     }
 
     /// Marks a worker as "vacant," meaning it is now ready to be
     /// assigned with new tasks.
-    #[must_use]
     #[inline]
-    pub async fn remove_worker(&self, id: usize) -> bool {
-        let success = self.trigger(PodTrigger::RemoveWorker { id }).await;
-        if success { true } else { false }
+    pub async fn remove_worker(&self, id: usize) -> Result<(), PodTriggerError> {
+        self.trigger(PodTrigger::RemoveWorker { id }).await
     }
 
-    #[inline(always)]
-    #[must_use]
-    pub async fn trigger(&self, trigger: PodTrigger) -> bool {
-        self.tx.send(trigger).await.is_ok()
+    #[inline]
+    pub async fn trigger(&self, trigger: PodTrigger) -> Result<(), PodTriggerError> {
+        self.tx
+            .send(trigger)
+            .await
+            .map_err(|_| PodTriggerError::ChannelClosed)
     }
 }
 
@@ -100,4 +91,10 @@ impl std::fmt::Debug for PodHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "PodHandle")
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PodTriggerError {
+    #[error("the pod channel has closed.")]
+    ChannelClosed,
 }

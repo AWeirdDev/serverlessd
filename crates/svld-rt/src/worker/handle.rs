@@ -41,8 +41,11 @@ impl WorkerHandle {
     /// Returns `false` if the channel is closed.
     #[inline(always)]
     #[must_use]
-    pub async fn trigger(&self, trigger: WorkerTrigger) -> bool {
-        self.tx.send(trigger).await.is_ok()
+    pub async fn trigger(&self, trigger: WorkerTrigger) -> Result<(), WorkerTriggerError> {
+        self.tx
+            .send(trigger)
+            .await
+            .map_err(|_| WorkerTriggerError::ChannelClosed)
     }
 }
 
@@ -50,4 +53,10 @@ impl std::fmt::Debug for WorkerHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "WorkerHandle")
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum WorkerTriggerError {
+    #[error("the channel to the worker has closed")]
+    ChannelClosed,
 }

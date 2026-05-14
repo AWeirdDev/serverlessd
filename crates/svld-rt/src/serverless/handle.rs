@@ -23,7 +23,6 @@ impl ServerlessHandle {
     }
 
     /// Notifies the serverless runtime to create a worker.
-    #[must_use]
     pub async fn create_worker(&self, name: String) -> Result<(usize, usize), CreateWorkerError> {
         tracing::info!("GET worker/{}", name);
 
@@ -51,8 +50,11 @@ impl ServerlessHandle {
     ///
     /// After this, the worker will mark itself as "sleeping."
     #[inline]
-    #[must_use]
-    pub async fn halt_task(&self, pod_id: usize, worker_id: usize) -> bool {
+    pub async fn halt_task(
+        &self,
+        pod_id: usize,
+        worker_id: usize,
+    ) -> Result<(), ServerlessTriggerError> {
         self.trigger(ServerlessTrigger::ToPod {
             id: pod_id,
             trigger: PodTrigger::ToWorker {
@@ -61,30 +63,33 @@ impl ServerlessHandle {
             },
         })
         .await
-        .is_some()
     }
 
     /// Upload worker code.
     #[inline]
-    #[must_use]
-    pub async fn upload_worker(&self, name: String, code: Bytes) -> Option<CodeStoreError> {
+    pub async fn upload_worker(&self, name: String, code: Bytes) -> Result<(), UploadWorkerError> {
         let (reply, recv) = oneshot::channel();
         self.trigger(ServerlessTrigger::UploadWorkerCode { name, code, reply })
             .await?;
 
-        recv.await.ok()?
+        recv.await
+            .map_err(|_| UploadWorkerError::Trigger(ServerlessTriggerError::ChannelClosed))??;
+        Ok(())
     }
 
     /// Remove worker code.
     #[inline]
-    pub async fn remove_worker_code(&self, name: String) -> Option<()> {
+    pub async fn remove_worker_code(&self, name: String) -> Result<(), ServerlessTriggerError> {
         self.trigger(ServerlessTrigger::RemoveWorkerCode { name })
             .await
     }
 
     #[inline]
-    #[must_use]
-    pub async fn send_http_to_worker(&self, pod: usize, wrk: usize) -> Option<Reply> {
+    pub async fn send_http_to_worker(
+        &self,
+        pod: usize,
+        wrk: usize,
+    ) -> Result<Reply, ServerlessTriggerError> {
         let (reply, recv) = oneshot::channel();
         self.trigger(ServerlessTrigger::ToPod {
             id: pod,
@@ -95,16 +100,21 @@ impl ServerlessHandle {
         })
         .await?;
 
-        let result = recv.await.ok()?;
+        let result = recv
+            .await
+            .map_err(|_| ServerlessTriggerError::ChannelClosed)?;
 
-        Some(result)
+        Ok(result)
     }
 
     /// Trigger the serverless runtime.
     #[inline]
     #[must_use]
-    pub async fn trigger(&self, trigger: ServerlessTrigger) -> Option<()> {
-        self.tx.send(trigger).await.ok()
+    pub async fn trigger(&self, trigger: ServerlessTrigger) -> Result<(), ServerlessTriggerError> {
+        self.tx
+            .send(trigger)
+            .await
+            .map_err(|_| ServerlessTriggerError::ChannelClosed)
     }
 }
 
@@ -112,4 +122,19 @@ impl std::fmt::Debug for ServerlessHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ServerlessHandle")
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ServerlessTriggerError {
+    #[error("the channel to the serverless runtime has closed")]
+    ChannelClosed,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UploadWorkerError {
+    #[error(transparent)]
+    Trigger(#[from] ServerlessTriggerError),
+
+    #[error(transparent)]
+    CodeStore(#[from] CodeStoreError),
 }

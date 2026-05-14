@@ -85,27 +85,20 @@ impl Pod {
         self.find_available_worker_spot().is_some()
     }
 
-    /// Removes a worker from the pod.
-    ///
-    /// # Returns
-    /// A boolean indicating whether the worker has been removed successfully.
-    pub fn remove_worker(&mut self, id: usize) -> bool {
+    /// Removes a worker from the pod, if exists.
+    #[inline]
+    pub fn remove_worker(&mut self, id: usize) {
         if let Some(worker) = self.workers.get_mut(id) {
             worker.replace(StatedWorkerHandle::Absent);
-            true
-        } else {
-            false
         }
     }
 
+    /// Marks a worker as sleeping, if exists.
     #[inline]
-    pub fn mark_worker_as_sleeping(&mut self, id: usize) -> bool {
-        if let Some(worker) = self.workers.get_mut(id) {
-            worker.mark_as_sleeping();
-            true
-        } else {
-            false
-        }
+    pub fn mark_worker_as_sleeping(&mut self, id: usize) {
+        self.workers
+            .get_mut(id)
+            .map(|worker| worker.mark_as_sleeping());
     }
 
     /// Gets a worker from the pod by ID, returning the worker handle with state attached.

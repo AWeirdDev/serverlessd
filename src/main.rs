@@ -272,7 +272,7 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
     let res = svl
         .upload_worker("one".to_string(), Bytes::from_owner(source))
         .await;
-    if res.is_some() {
+    if res.is_err() {
         tracing::error!("failed to upload one worker, reason: {res:?}");
         eprintln!("=====x error: failed to upload one worker");
         eprintln!("              this is usually due to a closed serverless runtime");
