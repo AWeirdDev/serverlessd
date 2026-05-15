@@ -56,7 +56,7 @@ info "found latest release: $TAG"
 
 # Check if already up to date
 if command -v "$BIN_NAME" > /dev/null 2>&1; then
-  CURRENT_VERSION=$("$BIN_NAME" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  CURRENT_VERSION=$("$BIN_NAME" --version 2>/dev/null | grep -oE 'v?.+' | head -1)
   if [ -n "$CURRENT_VERSION" ]; then
     CURRENT_NORM="${CURRENT_VERSION#v}"
     LATEST_NORM="${TAG#v}"
