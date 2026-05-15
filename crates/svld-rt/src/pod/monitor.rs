@@ -25,8 +25,6 @@ type MonitorRx = mpsc::UnboundedReceiver<MonitorTrigger>;
 
 /// A monitor attached to a pod, which can be used to monitor threads.
 pub struct Monitor {
-    // SAFETY: we don't need to get a stable memory address
-    // # of pod workers will not increase
     tracker: TaskTracker,
 }
 
