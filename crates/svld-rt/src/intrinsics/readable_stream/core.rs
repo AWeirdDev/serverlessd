@@ -7,7 +7,6 @@ use v8::{
 use svld_language::{ThrowException, throw, type_and_value};
 
 use crate::{
-    WorkerState,
     intrinsics::{
         readable_stream::{
             block::ReadableStreamBlock,
@@ -17,6 +16,7 @@ use crate::{
         },
         retrieve::retrieve_intrinsic,
     },
+    worker::WorkerState,
 };
 
 /// Represents the JavaScript `ReadableStream` API.

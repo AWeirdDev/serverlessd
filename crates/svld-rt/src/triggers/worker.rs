@@ -2,7 +2,7 @@ use crate::blocks::Replier;
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::WorkerTask;
+use crate::worker::WorkerTask;
 
 #[derive(Debug)]
 #[allow(unused)]

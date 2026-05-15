@@ -8,10 +8,10 @@ use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 use svld_language::ThrowException;
 
 use crate::{
-    BindingStore,
     blocks::{Blocks, HttpClientBlock, ReplierBlock},
+    pod::{MonitorHandle, Monitoring},
+    serverless::BindingStore,
     triggers::WorkerTx,
-    worker::{MonitorHandle, Monitoring},
 };
 
 type ResolutionCallback =

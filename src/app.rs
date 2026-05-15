@@ -9,7 +9,10 @@ use salvo::{
 };
 use serde_json::json;
 
-use svld_rt::{CreateWorkerError, ServerlessHandle, WorkerHttpResponse};
+use svld_rt::{
+    model::WorkerHttpResponse,
+    serverless::{CreateWorkerError, ServerlessHandle},
+};
 
 use crate::app_security::AuthMiddleware;
 

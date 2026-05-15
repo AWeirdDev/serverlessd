@@ -4,7 +4,7 @@ mod _priv {
 
     use v8::{Local, Object, PinScope, Value};
 
-    use crate::WorkerState;
+    use crate::worker::WorkerState;
 
     /// The JavaScript runtime `env`.
     pub struct JsEnv<'s> {

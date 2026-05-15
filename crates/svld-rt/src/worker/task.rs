@@ -10,18 +10,20 @@ use v8::{
 };
 
 use crate::{
-    BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
     intrinsics::{self, JsResponse},
     model::WorkerHttpResponse,
+    serverless::BindingStore,
 };
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, get_bytes, throw};
 
 use crate::{
-    WorkerState, compile, scope_with_context,
+    compile,
+    pod::MonitorHandle,
+    scope_with_context,
     triggers::{PodTrigger, PodTx, WorkerRx, WorkerTrigger, WorkerTx},
     try_catch,
-    worker::{MonitorHandle, state::CreateWorkerStateArgs},
+    worker::{WorkerState, state::CreateWorkerStateArgs},
 };
 
 /// The worker task.

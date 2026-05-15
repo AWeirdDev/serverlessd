@@ -13,7 +13,10 @@ use std::{
 
 use bytes::Bytes;
 use clap::Parser;
-use svld_rt::{BindingStore, Serverless, ServerlessHandle, bindings};
+use svld_rt::{
+    bindings,
+    serverless::{BindingStore, Serverless, ServerlessHandle},
+};
 use tokio::sync::mpsc;
 
 use crate::task::serverless_task;

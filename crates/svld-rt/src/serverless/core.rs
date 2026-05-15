@@ -6,7 +6,7 @@ use bytes::Bytes;
 use v8::{Platform, SharedRef};
 
 use crate::{
-    PodHandle,
+    pod::PodHandle,
     serverless::{
         binding_store::BindingStore,
         code_store::{CodeStore, CodeStoreError},

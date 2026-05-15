@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
 use crate::{
-    Pod,
+    pod::Pod,
     triggers::{WorkerTrigger, WorkerTx},
     worker::task::{WarmUpWorkerArgs, create_cancel_safe_task},
 };

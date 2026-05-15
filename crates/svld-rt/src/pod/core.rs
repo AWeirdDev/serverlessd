@@ -5,9 +5,14 @@ use tokio_util::task::TaskTracker;
 use v8::{Platform, SharedRef};
 
 use crate::{
-    BindingStore, Monitor, MonitorHandle, WorkerHandle,
-    pod::{handle::PodHandle, task::pod_task},
+    pod::{
+        handle::PodHandle,
+        monitor::{Monitor, MonitorHandle},
+        task::pod_task,
+    },
+    serverless::BindingStore,
     triggers::{PodTrigger, PodTx},
+    worker::WorkerHandle,
 };
 
 /// "A pod," conceptually it consists of a thread containing multiple workers
