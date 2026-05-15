@@ -1,7 +1,7 @@
-use std::{thread, time::Duration};
+use std::{sync::Arc, thread, time::Duration};
 
 use tokio::{
-    sync::{mpsc, oneshot},
+    sync::{Notify, mpsc, oneshot},
     task::LocalSet,
     time,
 };
@@ -67,12 +67,12 @@ impl Monitor {
         worker_id: usize,
         worker_tx: WorkerTx,
     ) -> Monitoring {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let notify = Arc::new(Notify::new());
 
-        let mw = MonitoredWorker::new(isolate_handle, worker_tx, rx);
+        let mw = MonitoredWorker::new(isolate_handle, worker_tx, notify.clone());
         self.tracker.spawn_local(monitor_worker_task(mw, worker_id));
 
-        Monitoring::new(tx)
+        Monitoring::new(notify)
     }
 }
 
@@ -115,20 +115,16 @@ impl MonitorHandle {
 pub struct MonitoredWorker {
     isolate: IsolateHandle,
     worker_tx: WorkerTx,
-    rx: mpsc::UnboundedReceiver<()>,
+    notify: Arc<Notify>,
 }
 
 impl MonitoredWorker {
     #[inline(always)]
-    pub fn new(
-        isolate: IsolateHandle,
-        worker_tx: WorkerTx,
-        rx: mpsc::UnboundedReceiver<()>,
-    ) -> Self {
+    pub fn new(isolate: IsolateHandle, worker_tx: WorkerTx, notify: Arc<Notify>) -> Self {
         Self {
             isolate,
             worker_tx,
-            rx,
+            notify,
         }
     }
 }
@@ -151,13 +147,13 @@ async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
 
 #[repr(transparent)]
 pub struct Monitoring {
-    tx: mpsc::UnboundedSender<()>,
+    notify: Arc<Notify>,
 }
 
 impl Monitoring {
     #[inline(always)]
-    fn new(tx: mpsc::UnboundedSender<()>) -> Self {
-        Self { tx }
+    fn new(tx: Arc<Notify>) -> Self {
+        Self { notify: tx }
     }
 
     /// Tick.
@@ -176,11 +172,11 @@ impl Monitoring {
     /// ```
     #[inline(always)]
     pub fn tick(&self) {
-        self.tx.send(()).ok();
+        self.notify.notify_one();
     }
 }
 
-async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
+async fn monitor_worker_task(mw: MonitoredWorker, worker_id: usize) {
     tracing::info!("monitoring worker {}", worker_id);
 
     let mut elapsed = Duration::default();
@@ -192,18 +188,13 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
     tokio::pin!(deadline);
 
     loop {
-        let first = tokio::select! {
+        tokio::select! {
             biased;
             _ = &mut walltime_tick => {
                 break;
             }
-            msg = mw.rx.recv() => msg,
+            msg = mw.notify.notified() => msg,
         };
-
-        if first.is_none() {
-            // channel closed
-            return;
-        }
 
         let remaining = Duration::from_millis(10).saturating_sub(elapsed);
         if remaining.is_zero() {
@@ -214,7 +205,7 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
 
         let start = time::Instant::now();
 
-        let message = tokio::select! {
+        tokio::select! {
             biased;
             _ = &mut walltime_tick => {
                 break;
@@ -222,20 +213,12 @@ async fn monitor_worker_task(mut mw: MonitoredWorker, worker_id: usize) {
             _ = &mut deadline => {
                 break;
             }
-            msg = mw.rx.recv() => msg,
+            msg = mw.notify.notified() => msg,
         };
 
-        match message {
-            Some(()) => {
-                elapsed += start.elapsed();
-                if elapsed >= Duration::from_millis(10) {
-                    break;
-                }
-            }
-            None => {
-                // channel closed
-                return;
-            }
+        elapsed += start.elapsed();
+        if elapsed >= Duration::from_millis(10) {
+            break;
         }
     }
 
