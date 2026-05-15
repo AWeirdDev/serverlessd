@@ -2,8 +2,6 @@
 
 <h1>serverlessd<br /><sup>(serverless runtime)</sup></h1>
 
-![github build](https://img.shields.io/github/actions/workflow/status/AWeirdDev/serverlessd/ci.yml)
-
 </div>
 
 <br />
@@ -16,33 +14,7 @@ You can use this for:
 - Custom LLM toolkit for fast execution
 - Setting up a lightweight container for running quick scripts
 
-## Installation
-You can install this via an install script ([svld.aweird.me](https://svld.aweird.me); you can inspect the code), if you'd like:
-
-```sh
-# inspect the code first
-curl -fsSL https://svld.aweird.me
-
-# ...then install
-curl -fsSL https://svld.aweird.me | sh
-```
-
-<details>
-
-<summary>Safer alternative</summary>
-
-If you still have safety concerns, a safer alternative would be to download from the [Releases](https://github.com/AWeirdDev/serverlessd/releases).
-It's just that you'd have to type a bit more. And I just hate typing.
-
-</details>
-
-## Getting started
-To start:
-
-```sh
-$ serverlessd run --pods 10 --workers-per-pod 2
-=====> server started at http://127.0.0.1:3000
-```
+[**Documentation**](https://svld.aweird.me)
 
 ***
 
