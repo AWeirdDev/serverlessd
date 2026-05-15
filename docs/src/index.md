@@ -1,6 +1,7 @@
 # serverlessd
 
 ![GitHub Release](https://img.shields.io/github/v/release/AWeirdDev/serverlessd)
+![GitHub Build](https://img.shields.io/github/actions/workflow/status/AWeirdDev/serverlessd/ci.yml)
 
 A lightweight serverless worker runtime.
 
@@ -49,7 +50,7 @@ Before installation, make sure to read the install script hosted at [is.gd/serve
 Then you can install:
 
 ```sh
-curl -fsSL https://svld.aweird.me | sh
+curl -fsSL https://svld.aweird.me/install.sh | sh
 ```
 
 If you still have safety concerns, a safer alternative is to download from the [Releases](https://github.com/AWeirdDev/serverlessd/releases).
