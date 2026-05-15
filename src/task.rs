@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use tokio::{io, task::JoinHandle};
 
 use svld_rt::{
-    CreateWorkerError, Pod, Serverless, ServerlessHandle, ServerlessRx, ServerlessTrigger,
-    WorkerTask,
+    CreateWorkerError, Pod, Serverless, ServerlessHandle, WorkerTask,
+    triggers::{ServerlessRx, ServerlessTrigger},
 };
 
 use crate::app::start_server;

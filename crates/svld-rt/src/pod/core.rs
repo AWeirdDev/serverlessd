@@ -6,7 +6,8 @@ use v8::{Platform, SharedRef};
 
 use crate::{
     BindingStore, Monitor, MonitorHandle, WorkerHandle,
-    pod::{PodTrigger, handle::PodHandle, task::pod_task, trigger::PodTx},
+    pod::{handle::PodHandle, task::pod_task},
+    triggers::{PodTrigger, PodTx},
 };
 
 /// "A pod," conceptually it consists of a thread containing multiple workers

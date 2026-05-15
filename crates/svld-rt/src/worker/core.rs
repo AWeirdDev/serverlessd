@@ -2,10 +2,8 @@ use tokio::sync::mpsc;
 
 use crate::{
     Pod,
-    worker::{
-        task::{WarmUpWorkerArgs, create_cancel_safe_task},
-        trigger::{WorkerTrigger, WorkerTx},
-    },
+    triggers::{WorkerTrigger, WorkerTx},
+    worker::task::{WarmUpWorkerArgs, create_cancel_safe_task},
 };
 
 /// A referenced-counted handle to the serverless worker.

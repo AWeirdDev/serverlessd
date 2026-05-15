@@ -34,4 +34,4 @@ pub enum WorkerTrigger {
 }
 
 pub type WorkerTx = mpsc::Sender<WorkerTrigger>;
-pub(super) type WorkerRx = mpsc::Receiver<WorkerTrigger>;
+pub type WorkerRx = mpsc::Receiver<WorkerTrigger>;

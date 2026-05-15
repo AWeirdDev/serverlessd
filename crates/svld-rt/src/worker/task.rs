@@ -18,12 +18,10 @@ use crate::{
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, get_bytes, throw};
 
 use crate::{
-    PodTrigger, PodTx, WorkerState, compile, scope_with_context, try_catch,
-    worker::{
-        MonitorHandle, WorkerTx,
-        state::CreateWorkerStateArgs,
-        trigger::{WorkerRx, WorkerTrigger},
-    },
+    WorkerState, compile, scope_with_context,
+    triggers::{PodTrigger, PodTx, WorkerRx, WorkerTrigger, WorkerTx},
+    try_catch,
+    worker::{MonitorHandle, state::CreateWorkerStateArgs},
 };
 
 /// The worker task.

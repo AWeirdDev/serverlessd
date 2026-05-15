@@ -11,6 +11,7 @@ mod worker;
 
 // public modules
 pub mod bindings;
+pub mod triggers;
 
 pub use crate::model::WorkerHttpResponse;
 pub use crate::pod::*;

@@ -1,8 +1,8 @@
 use tokio::sync::oneshot;
 
 use crate::{
-    WorkerTask, WorkerTrigger,
-    pod::{PodTrigger, trigger::PodTx},
+    WorkerTask,
+    triggers::{PodTrigger, PodTx, WorkerTrigger},
 };
 
 /// A handle for interacting with the `Pod` via message passing.

@@ -3,12 +3,8 @@ use bytes::Bytes;
 use tokio::sync::oneshot;
 
 use crate::{
-    PodTrigger, WorkerTrigger,
-    serverless::{
-        code_store::CodeStoreError,
-        error::CreateWorkerError,
-        trigger::{ServerlessTrigger, ServerlessTx},
-    },
+    serverless::{code_store::CodeStoreError, error::CreateWorkerError},
+    triggers::{PodTrigger, ServerlessTrigger, ServerlessTx, WorkerTrigger},
 };
 
 #[repr(transparent)]

@@ -5,12 +5,14 @@ use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 
-use crate::BindingStore;
-use crate::blocks::Blocks;
 use svld_language::ThrowException;
 
-use crate::blocks::{HttpClientBlock, ReplierBlock};
-use crate::worker::{MonitorHandle, Monitoring, WorkerTx};
+use crate::{
+    BindingStore,
+    blocks::{Blocks, HttpClientBlock, ReplierBlock},
+    triggers::WorkerTx,
+    worker::{MonitorHandle, Monitoring},
+};
 
 type ResolutionCallback =
     Box<dyn for<'s> FnOnce(&mut v8::PinScope<'s, '_>) -> v8::Local<'s, v8::Value>>;

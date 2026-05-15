@@ -1,8 +1,8 @@
 use tokio::sync::oneshot;
 
 use crate::{
-    WorkerTrigger,
-    pod::{PodTrigger, core::Pod, trigger::PodRx},
+    pod::Pod,
+    triggers::{PodRx, PodTrigger, WorkerTrigger},
 };
 
 #[tracing::instrument(name = "pod_task", skip_all)]
