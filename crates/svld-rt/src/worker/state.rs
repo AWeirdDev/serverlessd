@@ -8,9 +8,9 @@ use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 use svld_language::ThrowException;
 
 use crate::{
+    bindings::BindingStore,
     blocks::{Blocks, HttpClientBlock, ReplierBlock},
     pod::{MonitorHandle, Monitoring},
-    serverless::BindingStore,
     triggers::WorkerTx,
 };
 

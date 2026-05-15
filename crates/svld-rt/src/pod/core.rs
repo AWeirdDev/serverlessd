@@ -5,12 +5,12 @@ use tokio_util::task::TaskTracker;
 use v8::{Platform, SharedRef};
 
 use crate::{
+    bindings::BindingStore,
     pod::{
         handle::PodHandle,
         monitor::{Monitor, MonitorHandle},
         task::pod_task,
     },
-    serverless::BindingStore,
     triggers::{PodTrigger, PodTx},
     worker::WorkerHandle,
 };

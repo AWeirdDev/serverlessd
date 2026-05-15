@@ -10,10 +10,10 @@ use v8::{
 };
 
 use crate::{
+    bindings::BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
     intrinsics::{self, JsResponse},
     model::WorkerHttpResponse,
-    serverless::BindingStore,
 };
 use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, get_bytes, throw};
 

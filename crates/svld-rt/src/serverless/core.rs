@@ -6,11 +6,9 @@ use bytes::Bytes;
 use v8::{Platform, SharedRef};
 
 use crate::{
+    bindings::BindingStore,
     pod::PodHandle,
-    serverless::{
-        binding_store::BindingStore,
-        code_store::{CodeStore, CodeStoreError},
-    },
+    serverless::code_store::{CodeStore, CodeStoreError},
 };
 
 /// The serverless runtime, as an application.

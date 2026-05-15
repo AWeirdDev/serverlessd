@@ -2,6 +2,7 @@
 
 mod backend;
 mod general;
+mod store;
 
 pub mod kv;
 
@@ -9,3 +10,5 @@ pub use backend::{
     BindingBackend, BindingBackendMessage, BindingBackendRx, BindingBackendTx,
     binding_backend_channel,
 };
+
+pub use store::BindingStore;
