@@ -31,6 +31,8 @@ jobs:
       - name: Create CNAME
         run: |
           echo "svld.aweird.me" > CNAME
+          git add CNAME
+          git push
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
