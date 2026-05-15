@@ -645,7 +645,7 @@ async fn init_worker_for_task(
 
         let module = unwrap_compilation(
             try_catch,
-            compile::compile_module(try_catch, source, format!("worker.js",), roll_id),
+            compile::compile_module(try_catch, source, "worker.js", roll_id),
         )?;
 
         // instantiate imports, etc.
