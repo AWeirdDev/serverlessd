@@ -192,14 +192,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
         state,
         module,
         promise,
-    } = {
-        match init_worker_for_task(args).await {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(e);
-            }
-        }
-    };
+    } = init_worker_for_task(args).await?;
 
     let (_entrypoint, mut entrypoint_fetch) = {
         let isolate = unsafe { state.get_isolate() };
