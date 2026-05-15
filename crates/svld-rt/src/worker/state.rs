@@ -144,7 +144,7 @@ impl WorkerState {
     /// It's guranteed that the internal `WorkerState` will drop when no
     /// one's carrying the `Arc`, and returned handle is also dropped.
     #[inline(always)]
-    pub fn open_from_isolate<'a>(isolate: &'a Isolate) -> Arc<WorkerState> {
+    pub fn open_from_isolate(isolate: &Isolate) -> Arc<WorkerState> {
         let ptr = isolate.get_data(0) as *const WorkerState;
         unsafe { Arc::from_raw(ptr) }
     }

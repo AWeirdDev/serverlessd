@@ -1,12 +1,17 @@
-use std::{ffi::c_void, ptr::NonNull, str::FromStr, sync::Arc};
+use std::{
+    ffi::c_void,
+    ptr::{NonNull, null_mut},
+    str::FromStr,
+    sync::Arc,
+};
 
 use super::WorkerError;
 use bon::Builder;
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use v8::{
-    External, Function, GetPropertyNamesArgs, Global, Local, Module, OwnedIsolate, Platform,
-    Promise, SharedRef,
+    External, Function, GetPropertyNamesArgs, Global, Local, Module, ModuleStatus, OwnedIsolate,
+    Platform, Promise, SharedRef,
 };
 
 use crate::{
@@ -136,7 +141,7 @@ pub(super) async fn create_cancel_safe_task(
                     }
                 }
 
-                roll_id += roll_id.wrapping_add(1);
+                roll_id = roll_id.wrapping_add(1);
                 pod_tx
                     .send(PodTrigger::MarkWorkerAsSleeping { id })
                     .await
@@ -638,13 +643,24 @@ async fn init_worker_for_task(
 
         let module = unwrap_compilation(
             try_catch,
-            compile::compile_module(try_catch, source, "worker.js", roll_id),
+            compile::compile_module(try_catch, source, format!("worker.js?roll={}", roll_id)),
         )?;
 
         // instantiate imports, etc.
         {
-            let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
-            if res.is_none() {
+            // SAFETY: this is literally a v8 bug, and there is literally no
+            // better way to deal with this. essentially, when there's already a module
+            // here, and you try to instantiate again, it errors. but if you instantiate
+            // it AGAIN the second time, it fucking passes. what the actual fuck? and
+            // yeah i'm not being some fucker here, but what the fuck am i supposed to do?
+            for _ in 0..2 {
+                let res = module.instantiate_module(try_catch, compile::resolve_module_callback);
+                if !res.is_none() {
+                    break;
+                }
+            }
+
+            if !matches!(module.get_status(), ModuleStatus::Instantiated) {
                 return Err(WorkerError::ModuleInitError(
                     try_catch
                         .exception_details()
@@ -708,6 +724,7 @@ fn close_state(state: Arc<WorkerState>) {
     if !data.is_null() {
         let _ =
             unsafe { Global::from_raw(isolate, NonNull::new_unchecked(data as *mut v8::Value)) };
+        isolate.set_data(1, null_mut());
     }
 
     // then all the globals, we gotta erase em
