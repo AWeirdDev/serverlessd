@@ -8,7 +8,7 @@ use crate::{
     bindings::BindingStore,
     pod::{
         handle::PodHandle,
-        monitor::{Monitor, MonitorHandle},
+        monitor::{PodAsideMonitor, PodAsideMonitorHandle},
         task::pod_task,
     },
     triggers::{PodTrigger, PodTx},
@@ -31,7 +31,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Pod {
     pub tx: PodTx,
-    pub monitor: MonitorHandle,
+    pub monitor: PodAsideMonitorHandle,
     pub tasks: TaskTracker,
     pub platform: SharedRef<Platform>,
     pub binding_store: Arc<BindingStore>,
@@ -65,7 +65,7 @@ impl Pod {
             tasks: TaskTracker::new(),
             platform,
             monitor: {
-                let m = Monitor::new();
+                let m = PodAsideMonitor::new();
                 m.start()
             },
             binding_store,

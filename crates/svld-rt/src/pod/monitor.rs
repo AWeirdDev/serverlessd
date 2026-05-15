@@ -5,18 +5,18 @@ use tokio::{
     task::LocalSet,
     time,
 };
-use tokio_util::task::TaskTracker;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use v8::IsolateHandle;
 
 use crate::triggers::{WorkerTrigger, WorkerTx};
 
-pub enum MonitorTrigger {
+enum MonitorTrigger {
     Spawn {
         isolate_handle: IsolateHandle,
         worker_id: usize,
         worker_tx: WorkerTx,
-        reply: oneshot::Sender<Monitoring>,
+        reply: oneshot::Sender<MonitorHandle>,
     },
 }
 
@@ -24,11 +24,11 @@ type MonitorTx = mpsc::UnboundedSender<MonitorTrigger>;
 type MonitorRx = mpsc::UnboundedReceiver<MonitorTrigger>;
 
 /// A monitor attached to a pod, which can be used to monitor threads.
-pub struct Monitor {
+pub struct PodAsideMonitor {
     tracker: TaskTracker,
 }
 
-impl Monitor {
+impl PodAsideMonitor {
     /// Creates a worker wall time monitor that performs
     /// monitoring on a different thread to ensure true parallelism.
     #[inline]
@@ -40,7 +40,7 @@ impl Monitor {
 
     /// Start monitoring a worker. There is no need to `join()` the thread.
     /// Cancelling does not matter for this context.
-    pub fn start(self) -> MonitorHandle {
+    pub fn start(self) -> PodAsideMonitorHandle {
         let (tx, rx) = mpsc::unbounded_channel();
 
         thread::spawn(move || {
@@ -53,7 +53,7 @@ impl Monitor {
             rt.block_on(local.run_until(monitor_task(self, rx)));
         });
 
-        MonitorHandle::new(tx)
+        PodAsideMonitorHandle::new(tx)
     }
 
     /// Spawns the monitor for a worker.
@@ -66,25 +66,30 @@ impl Monitor {
         isolate_handle: IsolateHandle,
         worker_id: usize,
         worker_tx: WorkerTx,
-    ) -> Monitoring {
+    ) -> MonitorHandle {
         let notify = Arc::new(Notify::new());
+        let cancel = CancellationToken::new();
 
-        let mw = MonitoredWorker::new(isolate_handle, worker_tx, notify.clone());
-        self.tracker.spawn_local(monitor_worker_task(mw, worker_id));
+        let mw = MonitoredWorker::builder()
+            .isolate(isolate_handle)
+            .worker_id(worker_id)
+            .worker_tx(worker_tx)
+            .notify(notify.clone())
+            .cancel(cancel.clone())
+            .build();
+        self.tracker.spawn_local(monitor_worker_task(mw));
 
-        Monitoring::new(notify)
+        MonitorHandle { notify, cancel }
     }
 }
 
-/// A monitor handle for communicating with the monitor
-/// task. You can request to monitor a worker with this.
 #[repr(transparent)]
 #[derive(Debug, Clone)]
-pub struct MonitorHandle {
+pub struct PodAsideMonitorHandle {
     tx: MonitorTx,
 }
 
-impl MonitorHandle {
+impl PodAsideMonitorHandle {
     #[inline(always)]
     fn new(tx: MonitorTx) -> Self {
         Self { tx }
@@ -97,7 +102,7 @@ impl MonitorHandle {
         isolate_handle: IsolateHandle,
         worker_id: usize,
         worker_tx: WorkerTx,
-    ) -> Option<Monitoring> {
+    ) -> Option<MonitorHandle> {
         let (reply, recv) = oneshot::channel();
         self.tx
             .send(MonitorTrigger::Spawn {
@@ -112,24 +117,16 @@ impl MonitorHandle {
     }
 }
 
-pub struct MonitoredWorker {
+#[derive(Debug, bon::Builder)]
+struct MonitoredWorker {
     isolate: IsolateHandle,
+    worker_id: usize,
     worker_tx: WorkerTx,
     notify: Arc<Notify>,
+    cancel: CancellationToken,
 }
 
-impl MonitoredWorker {
-    #[inline(always)]
-    pub fn new(isolate: IsolateHandle, worker_tx: WorkerTx, notify: Arc<Notify>) -> Self {
-        Self {
-            isolate,
-            worker_tx,
-            notify,
-        }
-    }
-}
-
-async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
+async fn monitor_task(mut monitor: PodAsideMonitor, mut rx: MonitorRx) {
     while let Some(trigger) = rx.recv().await {
         match trigger {
             MonitorTrigger::Spawn {
@@ -138,25 +135,20 @@ async fn monitor_task(mut monitor: Monitor, mut rx: MonitorRx) {
                 worker_id,
                 worker_tx,
             } => {
-                let monitoring = monitor.spawn(isolate_handle, worker_id, worker_tx);
-                reply.send(monitoring).ok();
+                let handle = monitor.spawn(isolate_handle, worker_id, worker_tx);
+                reply.send(handle).ok();
             }
         }
     }
 }
 
-#[repr(transparent)]
-pub struct Monitoring {
+pub struct MonitorHandle {
     notify: Arc<Notify>,
+    cancel: CancellationToken,
 }
 
-impl Monitoring {
-    #[inline(always)]
-    fn new(tx: Arc<Notify>) -> Self {
-        Self { notify: tx }
-    }
-
-    /// Tick.
+impl MonitorHandle {
+    /// Ticks.
     ///
     /// You must tick back when the work is done.
     /// If the tick-back isn't received within 30ms, the
@@ -174,10 +166,19 @@ impl Monitoring {
     pub fn tick(&self) {
         self.notify.notify_one();
     }
+
+    /// Stops the monitoring.
+    ///
+    /// This can be called when the task is finished which
+    /// requires no supervision from then on.
+    #[inline(always)]
+    pub fn stop(&self) {
+        self.cancel.cancel();
+    }
 }
 
-async fn monitor_worker_task(mw: MonitoredWorker, worker_id: usize) {
-    tracing::info!("monitoring worker {}", worker_id);
+async fn monitor_worker_task(mw: MonitoredWorker) {
+    tracing::info!("monitoring worker {}", mw.worker_id);
 
     let mut elapsed = Duration::default();
 
@@ -187,9 +188,14 @@ async fn monitor_worker_task(mw: MonitoredWorker, worker_id: usize) {
     let deadline = time::sleep(Duration::from_millis(10));
     tokio::pin!(deadline);
 
+    let cancel = mw.cancel;
+
     loop {
         tokio::select! {
             biased;
+            _ = cancel.cancelled() => {
+                break;
+            }
             _ = &mut walltime_tick => {
                 break;
             }
@@ -222,10 +228,7 @@ async fn monitor_worker_task(mw: MonitoredWorker, worker_id: usize) {
         }
     }
 
-    halt(&mw);
-}
-
-fn halt(mw: &MonitoredWorker) {
+    // halt
     mw.isolate.terminate_execution();
 
     // we then halt the current task

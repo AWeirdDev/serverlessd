@@ -24,7 +24,7 @@ use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, get_bytes, 
 
 use crate::{
     compile,
-    pod::MonitorHandle,
+    pod::PodAsideMonitorHandle,
     scope_with_context,
     triggers::{PodTrigger, PodTx, WorkerRx, WorkerTrigger, WorkerTx},
     try_catch,
@@ -66,7 +66,7 @@ pub struct WarmUpWorkerArgs {
     pub worker_rx: WorkerRx,
 
     /// A handle to the monitor.
-    pub monitor_handle: MonitorHandle,
+    pub monitor_handle: PodAsideMonitorHandle,
 
     /// The platform the worker is on.
     pub platform: SharedRef<Platform>,
@@ -155,6 +155,8 @@ pub(super) async fn create_cancel_safe_task(
                 return;
             }
 
+            WorkerTrigger::HaltTask => (),
+
             _ => {
                 tracing::warn!(
                     "unknown worker trigger event {:?} while in sleeping loop, skipping",
@@ -180,7 +182,7 @@ struct InitWorkerArgs<'a> {
     isolate: NonNull<OwnedIsolate>,
     task: WorkerTask,
     tx: WorkerTx,
-    monitor_handle: MonitorHandle,
+    monitor_handle: PodAsideMonitorHandle,
     state_handle: &'a mut Option<Arc<WorkerState>>,
     roll_id: i32,
     platform: SharedRef<Platform>,
@@ -314,11 +316,9 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                 }
             }
 
-            tracing::info!("ticking");
-            state.tick_monitoring();
+            state.tick_monitor();
             try_catch.perform_microtask_checkpoint();
-            state.tick_monitoring();
-            tracing::info!("finished ticky tick!");
+            state.tick_monitor();
 
             continue;
         };
@@ -375,12 +375,12 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     });
 
                     // next: call
-                    state.tick_monitoring();
+                    state.tick_monitor();
                     let Some(result) = fetch.call(try_catch, v8::undefined(try_catch).cast(), &[])
                     else {
                         return Err(WorkerError::Timeout);
                     };
-                    state.tick_monitoring();
+                    state.tick_monitor();
 
                     if !result.is_promise() {
                         continue;
@@ -544,9 +544,9 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                         promise.catch(try_catch, unwrap_runtime(try_catch, reject)?);
                     }
 
-                    state.tick_monitoring();
+                    state.tick_monitor();
                     try_catch.perform_microtask_checkpoint();
-                    state.tick_monitoring();
+                    state.tick_monitor();
                 }
             }
         }
@@ -673,7 +673,7 @@ async fn init_worker_for_task(
         }
 
         // instantiate evaluations
-        state.tick_monitoring();
+        state.tick_monitor();
         let Some(promise) = module.evaluate(try_catch) else {
             return Err(WorkerError::ModuleInitError(
                 try_catch
@@ -682,7 +682,7 @@ async fn init_worker_for_task(
                     .unwrap_or_else(|| "failed to evaluate module".to_string()),
             ));
         };
-        state.tick_monitoring();
+        state.tick_monitor();
 
         let promise = promise.cast::<Promise>();
 
@@ -692,13 +692,13 @@ async fn init_worker_for_task(
         )
     };
 
-    state.tick_monitoring();
+    state.tick_monitor();
     // we gotta wait for it to initialize
     {
         let isolate = unsafe { state.get_isolate() };
         while Platform::pump_message_loop(&state.platform, isolate, false) {}
     }
-    state.tick_monitoring();
+    state.tick_monitor();
 
     Ok(InitResult {
         state,

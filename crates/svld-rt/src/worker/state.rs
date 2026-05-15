@@ -10,7 +10,7 @@ use svld_language::ThrowException;
 use crate::{
     bindings::BindingStore,
     blocks::{Blocks, HttpClientBlock, ReplierBlock},
-    pod::{MonitorHandle, Monitoring},
+    pod::{MonitorHandle, PodAsideMonitorHandle},
     triggers::WorkerTx,
 };
 
@@ -29,7 +29,7 @@ pub struct WorkerState {
 
     pub isolate: NonNull<OwnedIsolate>,
     pub platform: SharedRef<Platform>,
-    pub monitoring: Monitoring,
+    pub monitor: MonitorHandle,
     pub blocks: Blocks,
 
     pub name: String,
@@ -56,7 +56,7 @@ pub struct CreateWorkerStateArgs {
     pub worker_tx: WorkerTx,
 
     /// The monitor handle.
-    pub monitor_handle: MonitorHandle,
+    pub monitor_handle: PodAsideMonitorHandle,
 
     /// The binding store.
     pub binding_store: Arc<BindingStore>,
@@ -88,7 +88,7 @@ impl WorkerState {
 
             isolate,
             platform,
-            monitoring: monitor_handle
+            monitor: monitor_handle
                 .start_monitoring(isolate_handle, worker_id, worker_tx)
                 .await?,
             blocks: {
@@ -150,15 +150,24 @@ impl WorkerState {
     }
 
     /// Wait until the runtime has closed.
+    ///
+    /// This also stops the monitor.
     #[inline]
     pub fn close(self: Arc<Self>) {
         self.tasks.close();
+        self.stop_monitor();
     }
 
-    /// Ticks the [`Monitoring`].
+    /// Ticks the monitor.
     #[inline(always)]
-    pub fn tick_monitoring(&self) {
-        self.monitoring.tick();
+    pub fn tick_monitor(&self) {
+        self.monitor.tick();
+    }
+
+    /// Stops monitoring for this worker.
+    #[inline(always)]
+    pub fn stop_monitor(&self) {
+        self.monitor.stop();
     }
 
     /// Schedules promise resolution and tick with [`WorkerState::tick_event_loop()`].
