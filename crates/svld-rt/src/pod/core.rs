@@ -12,7 +12,7 @@ use crate::{
         task::pod_task,
     },
     triggers::{PodTrigger, PodTx},
-    worker::WorkerHandle,
+    worker::Worker,
 };
 
 /// "A pod," conceptually it consists of a thread containing multiple workers
@@ -109,7 +109,7 @@ impl Pod {
 
     /// Gets a worker from the pod by ID, returning the worker handle with state attached.
     #[inline]
-    pub(super) fn get_worker(&self, id: usize) -> Option<WorkerHandle> {
+    pub(super) fn get_worker(&self, id: usize) -> Option<Worker> {
         if let Some(worker) = self.workers.get(id) {
             worker.get_handle()
         } else {
@@ -138,7 +138,7 @@ impl Pod {
 
         let stated_handle = self.workers.get_mut(worker_id).unwrap();
         if !sleeping {
-            let handle = WorkerHandle::start_worker(self);
+            let handle = Worker::start_worker(self);
             let stated_handle = self.workers.get_mut(worker_id).unwrap();
             stated_handle.replace(StatedWorkerHandle::Running(Some(handle)));
         } else {
@@ -165,19 +165,19 @@ impl Pod {
 #[derive(Debug)]
 pub(super) enum StatedWorkerHandle {
     Absent,
-    Sleeping(Option<WorkerHandle>),
-    Running(Option<WorkerHandle>),
+    Sleeping(Option<Worker>),
+    Running(Option<Worker>),
 }
 
 #[allow(unused)]
 impl StatedWorkerHandle {
     #[inline(always)]
-    pub(super) const fn new_sleeping(handle: WorkerHandle) -> Self {
+    pub(super) const fn new_sleeping(handle: Worker) -> Self {
         Self::Sleeping(Some(handle))
     }
 
     #[inline(always)]
-    pub(super) const fn new_running(handle: WorkerHandle) -> Self {
+    pub(super) const fn new_running(handle: Worker) -> Self {
         Self::Running(Some(handle))
     }
 
@@ -193,7 +193,7 @@ impl StatedWorkerHandle {
         matches!(self, Self::Running(_))
     }
 
-    pub(super) fn mark_as_absent(&mut self) -> Option<WorkerHandle> {
+    pub(super) fn mark_as_absent(&mut self) -> Option<Worker> {
         if matches!(self, Self::Absent) {
             return None;
         }
@@ -224,7 +224,7 @@ impl StatedWorkerHandle {
     }
 
     #[inline(always)]
-    pub(super) fn take_handle(&mut self) -> Option<WorkerHandle> {
+    pub(super) fn take_handle(&mut self) -> Option<Worker> {
         match mem::replace(self, Self::Absent) {
             Self::Absent => None,
             Self::Running(v) => v,
@@ -233,7 +233,7 @@ impl StatedWorkerHandle {
     }
 
     #[inline(always)]
-    pub(super) fn get_handle(&self) -> Option<WorkerHandle> {
+    pub(super) fn get_handle(&self) -> Option<Worker> {
         match self {
             Self::Absent => None,
             Self::Running(v) => v.clone(),

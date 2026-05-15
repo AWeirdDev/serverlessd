@@ -9,11 +9,11 @@ use crate::{
 /// A referenced-counted handle to the serverless worker.
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct WorkerHandle {
+pub struct Worker {
     pub(super) tx: WorkerTx,
 }
 
-impl WorkerHandle {
+impl Worker {
     /// Start a new worker.
     #[inline]
     pub fn start_worker(pod: &Pod) -> Self {
@@ -47,7 +47,7 @@ impl WorkerHandle {
     }
 }
 
-impl std::fmt::Debug for WorkerHandle {
+impl std::fmt::Debug for Worker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "WorkerHandle")
     }
