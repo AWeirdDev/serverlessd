@@ -54,6 +54,21 @@ fi
 
 info "found latest release: $TAG"
 
+# Check if already up to date
+if command -v "$BIN_NAME" > /dev/null 2>&1; then
+  CURRENT_VERSION=$("$BIN_NAME" --version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  if [ -n "$CURRENT_VERSION" ]; then
+    CURRENT_NORM="${CURRENT_VERSION#v}"
+    LATEST_NORM="${TAG#v}"
+    if [ "$CURRENT_NORM" = "$LATEST_NORM" ]; then
+      done_ "serverlessd is already up to date (${TAG})"
+      exit 0
+    else
+      info "update available, upgrading from ${CURRENT_VERSION} to ${TAG}"
+    fi
+  fi
+fi
+
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${BINARY}"
 
 info "downloading ${BINARY}..."
