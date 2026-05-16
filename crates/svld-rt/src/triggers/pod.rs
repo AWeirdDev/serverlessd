@@ -4,9 +4,6 @@ use super::worker::WorkerTrigger;
 
 #[derive(Debug)]
 pub enum PodTrigger {
-    /// Checks for vacancies.
-    CheckVacancies { reply: oneshot::Sender<bool> },
-
     /// Sends data to a worker.
     ToWorker { id: usize, trigger: WorkerTrigger },
 

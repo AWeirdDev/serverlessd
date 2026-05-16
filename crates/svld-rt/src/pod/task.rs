@@ -9,11 +9,6 @@ use crate::{
 pub(super) async fn pod_task(mut pod: Pod, mut rx: PodRx) {
     while let Some(event) = rx.recv().await {
         match event {
-            PodTrigger::CheckVacancies { reply } => {
-                tracing::info!("pod checking vacancies, workers: {:?}", pod.workers);
-                reply.send(pod.has_vacancies()).ok();
-            }
-
             PodTrigger::WarmUpWorker { reply } => {
                 let id = pod.create_and_warmup_worker().unwrap();
                 reply.send(id).ok();

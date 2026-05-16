@@ -38,20 +38,6 @@ impl PodHandle {
         recv.await.map_err(|_| PodTriggerError::ChannelClosed)
     }
 
-    /// Checks whether or not this pod has any vacancies to run a task.
-    pub async fn has_vacancies(&self) -> bool {
-        let (reply, recv) = oneshot::channel();
-        if self
-            .trigger(PodTrigger::CheckVacancies { reply })
-            .await
-            .is_err()
-        {
-            return false;
-        }
-
-        recv.await.ok().unwrap_or(false)
-    }
-
     /// Creates and warms up a worker.
     pub async fn create_and_warmup_worker(&self) -> Result<usize, PodTriggerError> {
         let (reply, receive) = oneshot::channel::<usize>();
