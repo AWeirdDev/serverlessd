@@ -1,9 +1,0 @@
-[book]
-title = "serverlessd"
-authors = ["AWeirdDev"]
-language = "en"
-
-[output.html]
-additional-css = ["./theme/catppuccin.css"]
-default-theme = "latte"
-preferred-dark-theme = "mocha"

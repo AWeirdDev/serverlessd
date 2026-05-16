@@ -1,7 +1,12 @@
-# serverlessd
+---
+date: '2026-05-16T23:15:57+08:00'
+draft: true
+title: 'serverlessd'
+---
 
 ![GitHub Release](https://img.shields.io/github/v/release/AWeirdDev/serverlessd)
 ![GitHub Build](https://img.shields.io/github/actions/workflow/status/AWeirdDev/serverlessd/ci.yml)
+
 
 A lightweight serverless worker runtime.
 
@@ -19,7 +24,7 @@ Since there's only one worker thread, it's recommended to put about 2-3 workers 
 
 Serverless runtime, pods, and workers communicate via message passing, making it near lock-free.
 
-```python
+```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Serverless Runtime                           │
 │                                                                     │
