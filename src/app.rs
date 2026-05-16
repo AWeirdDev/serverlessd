@@ -103,7 +103,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
                     .ok();
                     resp.render(
                         ErrorTemplate {
-                            reasoning: "We couldn't allocate any space for your worker. That's fucked up.",
+                            reasoning: "We couldn't allocate any space for this worker.",
                         }
                         .to_string(),
                     );
