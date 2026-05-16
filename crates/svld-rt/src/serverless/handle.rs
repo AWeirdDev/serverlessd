@@ -24,8 +24,7 @@ impl ServerlessHandle {
         name: String,
     ) -> Result<(usize, usize), CreateWorkerError> {
         let (reply, receive) = oneshot::channel();
-        self.tx
-            .send(ServerlessTrigger::CreateWorkerTask { name, reply })
+        self.trigger(ServerlessTrigger::CreateWorkerTask { name, reply })
             .await
             .map_err(|_| {
                 CreateWorkerError::CannotCreateTask(
@@ -47,7 +46,7 @@ impl ServerlessHandle {
     ///
     /// After this, the worker will mark itself as "sleeping."
     #[inline]
-    pub async fn halt_task(
+    pub async fn halt_task_and_clear_space(
         &self,
         pod_id: usize,
         worker_id: usize,

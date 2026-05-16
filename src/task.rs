@@ -5,7 +5,7 @@ use tokio::{io, task::JoinHandle};
 use svld_rt::{
     pod::Pod,
     serverless::{CreateWorkerError, Serverless, ServerlessHandle},
-    triggers::{ServerlessRx, ServerlessTrigger},
+    triggers::{PodTrigger, ServerlessRx, ServerlessTrigger, WorkerTrigger},
     worker::WorkerTask,
 };
 
@@ -96,6 +96,10 @@ pub(super) async fn serverless_task(
                                 tracing::info!("done with creating worker task");
                             }
                             ServerlessTrigger::ToPod { id, trigger } => {
+                                if matches!(trigger, PodTrigger::ToWorker { id: _, trigger: WorkerTrigger::HaltTask }) {
+                                    serverless.release_pod_space(id);
+                                }
+
                                 if let Some(pod) = serverless.get_pod(id) {
                                     let _ = pod.trigger(trigger).await;
                                 }

@@ -136,7 +136,10 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
     };
 
     {
-        let res = state.serverless.halt_task(pod_id, worker_id).await;
+        let res = state
+            .serverless
+            .halt_task_and_clear_space(pod_id, worker_id)
+            .await;
         if res.is_err() {
             tracing::error!("failed to halt task after http is done");
         }

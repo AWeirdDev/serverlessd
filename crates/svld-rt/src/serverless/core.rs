@@ -8,7 +8,10 @@ use v8::{Platform, SharedRef};
 use crate::{
     bindings::BindingStore,
     pod::PodHandle,
-    serverless::code_store::{CodeStore, CodeStoreError},
+    serverless::{
+        code_store::{CodeStore, CodeStoreError},
+        space::SpaceState,
+    },
 };
 
 /// The serverless runtime, as an application.
@@ -21,18 +24,16 @@ use crate::{
 /// );
 /// ```
 #[derive(Debug)]
+#[allow(unused)]
 pub struct Serverless {
     pub n_pods: usize,
     pub n_workers: usize,
-
-    pub code_store: CodeStore,
-    pub binding_store: Arc<BindingStore>,
-
-    // why the fuck is this super fucking big???
-    // like, fucking 16 bytes
-    // or whatever, if you're happy with it
     pub platform: SharedRef<Platform>,
-    pub pods: Vec<PodHandle>,
+    pub binding_store: Arc<BindingStore>,
+    pub code_store: CodeStore,
+
+    pods: Vec<PodHandle>,
+    space: SpaceState,
 }
 
 #[bon]
@@ -61,6 +62,8 @@ impl Serverless {
             workers_path.unwrap_or("workers"),
         );
 
+        let space = SpaceState::new(n_pods, n_workers);
+
         Self {
             n_pods,
             n_workers,
@@ -68,6 +71,7 @@ impl Serverless {
             platform,
             pods,
             binding_store,
+            space,
         }
     }
 
@@ -95,16 +99,19 @@ impl Serverless {
     /// `Some(((pod_handle, monitor_handke), (pod_id, pod_worker_id)))` if found.
     #[inline]
     pub async fn find_vacancy_and_warmup(&self) -> Option<(PodHandle, usize, usize)> {
-        for (pod_id, pod) in self.pods.iter().enumerate() {
-            if pod.has_vacancies().await {
-                tracing::info!("found pod {} has a vacancy!", pod_id);
+        if let Some(pod_id) = self.space.request_use_space() {
+            let pod = self.pods.get(pod_id).unwrap();
 
-                if let Ok(pod_worker_id) = pod.create_and_warmup_worker().await {
-                    return Some((pod.clone(), pod_id, pod_worker_id));
-                }
-            }
+            let pod_worker_id = pod.create_and_warmup_worker().await.unwrap();
+            Some((pod.clone(), pod_id, pod_worker_id))
+        } else {
+            None
         }
-        None
+    }
+
+    /// Releases count for a space in a pod.
+    pub fn release_pod_space(&self, pod_id: usize) {
+        let _ = self.space.release_pod_space(pod_id);
     }
 
     #[inline(always)]
