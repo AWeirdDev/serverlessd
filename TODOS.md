@@ -1,6 +1,5 @@
 # Pending
-- [ ] **MORE** idiomatic rust; **LESS** weird booleans and `#[must_use]`
-- [ ] better model for getting vacancies
+- [ ] "better model for getting vacancies": add shared arrays of ABSENT, SLEEPING or RUNNING stated worker IDs to keep track of them.
 
 # Done
 - [x] add OCCUPIED logic. it's not implemented right now, so created workers just stay there.
@@ -12,3 +11,4 @@
 - [x] fetch
 - [x] `ReadableStream` API
 - [x] accept `Response`
+- [x] **MORE** idiomatic rust; **LESS** weird booleans and `#[must_use]`

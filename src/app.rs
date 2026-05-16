@@ -76,7 +76,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
     let name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
 
-    let (pod_id, worker_id) = match state.serverless.create_worker(name).await {
+    let (pod_id, worker_id) = match state.serverless.create_worker_task(name).await {
         Ok(t) => t,
         Err(err) => {
             match err {

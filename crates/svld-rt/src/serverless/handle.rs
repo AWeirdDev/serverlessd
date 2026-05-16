@@ -19,12 +19,13 @@ impl ServerlessHandle {
     }
 
     /// Notifies the serverless runtime to create a worker.
-    pub async fn create_worker(&self, name: String) -> Result<(usize, usize), CreateWorkerError> {
-        tracing::info!("GET worker/{}", name);
-
+    pub async fn create_worker_task(
+        &self,
+        name: String,
+    ) -> Result<(usize, usize), CreateWorkerError> {
         let (reply, receive) = oneshot::channel();
         self.tx
-            .send(ServerlessTrigger::CreateWorker { name, reply })
+            .send(ServerlessTrigger::CreateWorkerTask { name, reply })
             .await
             .map_err(|_| {
                 CreateWorkerError::CannotCreateTask(

@@ -8,7 +8,7 @@ use super::pod::PodTrigger;
 #[derive(Debug)]
 pub enum ServerlessTrigger {
     /// Creates a worker.
-    CreateWorker {
+    CreateWorkerTask {
         name: String,
         reply: oneshot::Sender<Result<(usize, usize), CreateWorkerError>>,
     },

@@ -58,7 +58,7 @@ pub(super) async fn serverless_task(
                 match trigger_result {
                     Some(trigger) => {
                         match trigger {
-                            ServerlessTrigger::CreateWorker { name, reply } => {
+                            ServerlessTrigger::CreateWorkerTask { name, reply } => {
                                 let source = match serverless.code_store.get_worker_code(&name).await {
                                     Some(t) => t,
                                     None => {
