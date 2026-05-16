@@ -114,7 +114,6 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
         }
     };
 
-    tracing::info!("sending http to worker");
     let Ok(result) = state
         .serverless
         .send_http_to_worker(pod_id, worker_id)
