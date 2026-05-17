@@ -49,8 +49,7 @@ enum Command {
     /// Clean all stored workers.
     Clean(CleanArgs),
 
-    /// Upload a worker in this working directory,
-    /// instead of HTTP.
+    /// Upload a worker in this working directory.
     Upload(UploadArgs),
 
     /// Initialize the environment in this directory.

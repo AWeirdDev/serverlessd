@@ -2728,7 +2728,7 @@ dependencies = [
 
 [[package]]
 name = "serverlessd"
-version = "0.0.6-rf"
+version = "0.0.7"
 dependencies = [
  "askama",
  "async-trait",
