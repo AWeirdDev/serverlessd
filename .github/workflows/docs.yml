@@ -59,6 +59,10 @@ jobs:
         run: |
           echo "svld.aweird.me" > public/CNAME
 
+      - name: Move install.sh
+        run: |
+          mv ../scripts/install.sh ./content/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
