@@ -1,6 +1,6 @@
 ---
 date: '2026-05-16T23:19:24+08:00'
-draft: true
+draft: false
 title: 'Worker scripts'
 cascade:
   type: docs
