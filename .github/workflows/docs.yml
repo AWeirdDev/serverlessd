@@ -61,7 +61,7 @@ jobs:
 
       - name: Move install.sh
         run: |
-          mv ../scripts/install.sh ./content/
+          mv ../scripts/install.sh ./public/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
