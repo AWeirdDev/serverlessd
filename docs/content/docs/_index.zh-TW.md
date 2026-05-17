@@ -7,23 +7,26 @@ cascade:
 
 # serverlessd
 
-A lightweight serverless worker runtime built for everyone.
+一個輕量級的 Serverless Worker Runtime，為所有人而打造。中文聽起來超憨。
 
-To put it simply, a **serverless worker** is a fast, minimal environment that runs small event-driven functions on demand, without requiring users/developers to manage servers. And thus the job of a **serverless runtime** is to make those workers possible and safe.
+簡單來說，**Serverless Worker** 是一種快速、精簡的執行環境，可以在需要時動態執行小型、事件驅動的函式，而不需要使用者或開發者自行管理伺服器。
 
-This project aims to be a simple, reliable, and extensible serverless runtime.
+而 **Serverless Runtime** 的工作，就是讓這些 Worker 能夠安全、穩定地運作。
 
-## Architecture
-Overall, the architecture is self-explanatory. Within a Serverless Runtime, there can be numerous workers, and each worker consists of two threads: the **Monitor Thread** and the **Worker Thread**.
+這個專案的目標，是打造一個簡單、可靠、且具備擴充性的 Serverless Runtime。
 
-- **Monitor thread**: For monitoring workers, checking whether they've exceeded the time limit.
-- **Worker thread**: An single-threaded asynchornous runtime for running workers.
+## 架構
 
-Since there's only one worker thread, it's recommended to put about 2-3 workers per pod, if following the recommended timeout settings.
+整體架構其實滿直觀的。在一個 Serverless Runtime 裡，可以同時存在多個 Worker，而每個 Worker 都由兩條執行緒組成：
 
-Serverless runtime, pods, and workers communicate via message passing, making it near lock-free.
+- **Monitor Thread**：負責監控 Worker，檢查是否超過執行時間限制。
+- **Worker Thread**：單執行緒的非同步 Runtime，實際負責執行 Worker。
 
-```
+由於只有一個 Worker Thread，因此如果採用建議的 timeout 設定，通常建議每個 Pod 放大約 2～3 個 Worker。
+
+另外，Runtime、Pods 與 Workers 之間採用訊息傳遞溝通，因此整體設計幾乎是 lock-free 的。
+
+```txt
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Serverless Runtime                           │
 │                                                                     │
@@ -49,26 +52,36 @@ Serverless runtime, pods, and workers communicate via message passing, making it
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Installation
-Before installation, make sure to read the install script hosted at [svld.aweird.me/install.sh](https://svld.aweird.me/install.sh) via `curl`.
-Then you can install:
+## 安裝
+
+安裝前，建議先閱讀透過 `curl` 從 [svld.aweird.me/install.sh](https://svld.aweird.me/install.sh) 下載的安裝腳本內容。
+
+之後可以直接執行：
 
 ```sh
 curl -fsSL https://svld.aweird.me/install.sh | sh
 ```
 
-If you still have safety concerns, a safer alternative is to download from the [GitHub Releases](https://github.com/AWeirdDev/serverlessd/releases).
-It's just that you'd have to type a bit more. And I just hate typing.
+如果你還是對安全性有疑慮，也可以改從 [GitHub Releases](https://github.com/AWeirdDev/serverlessd/releases) 頁面手動下載。
+只是要多打幾個字而已，有點懶。
 
-## Tools
-This project was made possible with [this computer](https://www.apple.com/macbook-air/).
+## 使用工具
 
-[Claude](https://claude.ai) was used, but only in these parts, which I'm too lazy to deal with:
-- The `fetch()` implementation
-- Fucking `ReadableStream` implementation
-- JavaScript module instantiation, like a few lines
+這個專案是在[這台電腦](https://www.apple.com/macbook-air/)上完成的。
 
-Additionally, a human was always in the loop, because they couldn't code or think at all.
+另外也用了憨仔 Claude，但只有在一些我懶得處理的地方：
 
-## Club expo
-[latent 2026](https://www.instagram.com/ckefgisc_latent_2026)
+- `fetch()` 的實作
+- 超憨 `ReadableStream` 實踐
+- JavaScript 模組實例化
+
+除此之外，整個過程都有真人參與。以防你不知道我是人。
+
+## 社展
+
+2026 建北電資聯合社展 [latent](https://www.instagram.com/ckefgisc_latent_2026)
+
+- 活動時間：05/31 （日）10:30~17:00
+- 活動地點：建中夢紅樓一樓
+
+欸幹有沒有人 5/30 要去看 Backrooms 揪揪揪揪

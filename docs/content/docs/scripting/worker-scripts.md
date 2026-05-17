@@ -1,12 +1,11 @@
 ---
 date: '2026-05-16T23:19:24+08:00'
 draft: true
-title: 'Scripting'
+title: 'Worker scripts'
 cascade:
   type: docs
 ---
 
-# Worker scripts
 Worker scripts are scripts that run in a controlled JavaScript environment which can be triggered via HTTP events (such as `GET`, `POST`, etc.) or CRON schedules.
 
 Worker scripts should satisfy the following requirements:

@@ -4,3 +4,27 @@ title: serverlessd
 module:
   imports:
     - path: github.com/imfing/hextra
+menu:
+  main:
+    - name: Documentation
+      identifier: documentation
+      pageRef: /docs
+      weight: 1
+    - name: Search
+      weight: 4
+      params:
+        type: search
+    - name: GitHub
+      weight: 5
+      url: "https://github.com/AWeirdDev/serverlessd"
+      params:
+        icon: github
+
+defaultContentLanguage: en
+languages:
+  en:
+    languageName: English
+    weight: 1
+  zh-TW:
+    languageName: 繁體中文
+    weight: 2

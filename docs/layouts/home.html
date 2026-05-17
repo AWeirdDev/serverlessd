@@ -1,0 +1,46 @@
+{{ define "main" }}
+<div class="hx:mx-auto hx:flex hextra-max-page-width">
+    {{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
+    <main
+        id="content"
+        class="hx:w-full hx:break-words hx:min-h-[calc(100vh-var(--navbar-height))] hx:min-w-0 hx:pb-8 hx:pt-8 hx:md:pt-12 hx:pl-[max(env(safe-area-inset-left),1.5rem)] hx:pr-[max(env(safe-area-inset-left),1.5rem)]"
+    >
+        <div class="hx:flex hx:flex-col hx:items-center">
+            <img src="/images/serverlessd-logo.png" style="max-height: 360px" />
+            <h1 class="hx:text-4xl hx:font-bold" style="margin-top: 32px">
+                serverlessd
+            </h1>
+            <p class="hx:text-xl" style="margin-bottom: 16px">
+                {{ i18n "tagline" }}
+            </p>
+
+            <div
+                style="
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 12px;
+                "
+            >
+                <img
+                    src="https://img.shields.io/github/v/release/AWeirdDev/serverlessd"
+                    alt="GitHub Release"
+                />
+                <img
+                    src="https://img.shields.io/github/actions/workflow/status/AWeirdDev/serverlessd/ci.yml"
+                    alt="GitHub Build"
+                />
+            </div>
+
+            <!-- stole this from hextra itself -->
+            <a
+                href="docs"
+                class="not-prose hx:font-medium hx:cursor-pointer hx:px-6 hx:py-3 hx:rounded-full hx:text-center hx:text-white hx:inline-block hx:bg-primary-600 hx:hover:bg-primary-700 hx:hextra-focus-visible hx:dark:bg-primary-600 hx:dark:hover:bg-primary-700 hx:transition-all hx:ease-in hx:duration-200"
+                style="margin-top: 36px"
+            >
+                {{ i18n "getStarted" }}
+            </a>
+        </div>
+    </main>
+</div>
+{{ end }}

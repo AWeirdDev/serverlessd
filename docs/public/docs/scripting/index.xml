@@ -1,13 +1,13 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>serverlessd – </title>
-    <link>http://localhost:1313/docs/</link>
-    <description>Recent content on serverlessd</description>
+    <title>serverlessd – Scripting</title>
+    <link>http://localhost:1313/docs/scripting/</link>
+    <description>Recent content in Scripting on serverlessd</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sat, 16 May 2026 23:15:57 +0800</lastBuildDate>
+    <lastBuildDate>Sat, 16 May 2026 23:19:24 +0800</lastBuildDate>
     
-	  <atom:link href="http://localhost:1313/docs/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="http://localhost:1313/docs/scripting/index.xml" rel="self" type="application/rss+xml" />
     
     
       
