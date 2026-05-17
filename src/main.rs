@@ -43,7 +43,7 @@ enum Command {
     /// Run the full serverless runtime.
     ///
     /// The amount of memory needed is determined by the
-    /// `n-pods` and `n-pods-per-worker` options.
+    /// `pods` and `pods-per-worker` options.
     Run(RunArgs),
 
     /// Clean all stored workers.
