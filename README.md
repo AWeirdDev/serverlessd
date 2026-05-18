@@ -34,4 +34,4 @@ You can use this for:
 
 ***
 
-[社展](https://www.instagram.com/ckefgisc_latent_2026)
+[社展](https://exhibit.ckefgisc.org/)
