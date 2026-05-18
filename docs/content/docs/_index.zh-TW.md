@@ -79,7 +79,7 @@ curl -fsSL https://svld.aweird.me/install.sh | sh
 
 ## 社展
 
-2026 建北電資聯合社展 [latent](https://www.instagram.com/ckefgisc_latent_2026)
+2026 建北電資聯合社展 [latent](https://exhibit.ckefgisc.org/)
 
 - 活動時間：05/31 （日）10:30~17:00
 - 活動地點：建中夢紅樓一樓
