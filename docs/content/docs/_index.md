@@ -71,4 +71,4 @@ This project was made possible with [this computer](https://www.apple.com/macboo
 Additionally, a human was always in the loop, because they couldn't code or think at all.
 
 ## Club expo
-[latent 2026](https://www.instagram.com/ckefgisc_latent_2026)
+[latent 2026](https://exhibit.ckefgisc.org/)
