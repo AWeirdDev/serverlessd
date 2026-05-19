@@ -1,9 +1,10 @@
 use bytes::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::serverless::{CodeStoreError, CreateWorkerError};
-
-use super::pod::PodTrigger;
+use svld_rt::{
+    serverless::{CodeStoreError, CreateWorkerError},
+    triggers::PodTrigger,
+};
 
 #[derive(Debug)]
 pub enum ServerlessTrigger {

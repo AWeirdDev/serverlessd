@@ -9,12 +9,9 @@ use salvo::{
 };
 use serde_json::json;
 
-use svld_rt::{
-    model::WorkerHttpResponse,
-    serverless::{CreateWorkerError, ServerlessHandle},
-};
+use svld_rt::{model::WorkerHttpResponse, serverless::CreateWorkerError};
 
-use crate::app_security::AuthMiddleware;
+use crate::{app_security::AuthMiddleware, handle::ServerlessHandle};
 
 #[derive(Template)]
 #[template(path = "404.html")]

@@ -4,12 +4,16 @@ use tokio::{io, task::JoinHandle};
 
 use svld_rt::{
     pod::Pod,
-    serverless::{CreateWorkerError, Serverless, ServerlessHandle},
-    triggers::{PodTrigger, ServerlessRx, ServerlessTrigger, WorkerTrigger},
+    serverless::{CreateWorkerError, Serverless},
+    triggers::{PodTrigger, WorkerTrigger},
     worker::WorkerTask,
 };
 
-use crate::app::start_server;
+use crate::{
+    app::start_server,
+    handle::ServerlessHandle,
+    trigger::{ServerlessRx, ServerlessTrigger},
+};
 
 pub(super) async fn serverless_task(
     mut serverless: Serverless,

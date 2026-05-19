@@ -1,6 +1,8 @@
 mod app;
 mod app_security;
+mod handle;
 mod task;
+mod trigger;
 
 use std::{
     fs,
@@ -16,11 +18,11 @@ use bytes::Bytes;
 use clap::Parser;
 use svld_rt::{
     bindings::{self, BindingStore},
-    serverless::{Serverless, ServerlessHandle},
+    serverless::Serverless,
 };
 use tokio::sync::mpsc;
 
-use crate::task::serverless_task;
+use crate::{handle::ServerlessHandle, task::serverless_task};
 
 /// Serverless workers management architecture.
 #[derive(clap::Parser)]

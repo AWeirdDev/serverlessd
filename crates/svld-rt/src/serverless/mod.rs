@@ -7,4 +7,3 @@ mod space;
 pub use code_store::*;
 pub use core::Serverless;
 pub use error::CreateWorkerError;
-pub use handle::ServerlessHandle;
