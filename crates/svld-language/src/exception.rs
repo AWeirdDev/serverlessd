@@ -59,7 +59,8 @@ impl ExceptionDetailsExt for PinnedRef<'_, TryCatch<'_, '_, HandleScope<'_>>> {
     }
 }
 
-/// Throws an exception.
+/// Represents the action of throwing an exception.
+#[derive(Debug, Clone)]
 pub enum ThrowException {
     Error(String),
     TypeError(String),
