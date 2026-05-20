@@ -1,3 +1,3 @@
-mod backend;
+mod core;
 
-pub use backend::{KvBackend, KvPayload};
+pub use core::{KvBackend, KvPayload};
