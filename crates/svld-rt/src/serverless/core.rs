@@ -75,18 +75,6 @@ impl Serverless {
         }
     }
 
-    /// Create a serverless runtime for one worker only.
-    #[inline]
-    pub fn new_one() -> Self {
-        Self::builder()
-            .n_pods(1)
-            .n_workers(1)
-            .parent(".serverlessd")
-            .workers_path("one")
-            .binding_store(Arc::new(BindingStore::new()))
-            .build()
-    }
-
     /// Gets a clone of the shared reference from [`v8`].
     #[inline(always)]
     pub fn get_platform(&self) -> SharedRef<Platform> {
