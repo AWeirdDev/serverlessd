@@ -1,32 +1,23 @@
-#[allow(unused)]
-mod _priv {
-    use std::sync::Arc;
+use std::sync::Arc;
 
-    use v8::{Local, Object, PinScope, Value};
+use v8::{Local, Object, PinScope};
 
-    use crate::worker::WorkerState;
+use crate::worker::WorkerState;
 
-    /// The JavaScript runtime `env`.
-    pub struct JsEnv<'s> {
-        obj: Local<'s, Object>,
-        state: Arc<WorkerState>,
+/// Creates a JavaScript env (binding) interface.
+#[inline(always)]
+pub fn create_js_env<'s>(
+    scope: &PinScope<'s, '_>,
+    state: Arc<WorkerState>,
+) -> Option<Local<'s, v8::Value>> {
+    let obj = Object::new(scope);
+    for (name, binding) in state.binding_store.list() {
+        obj.set(
+            scope,
+            v8::String::new(scope, name)?.cast(),
+            binding.client.get_interface(scope)?,
+        );
     }
 
-    impl<'s> JsEnv<'s> {
-        #[inline(always)]
-        #[must_use]
-        pub fn new(scope: &PinScope<'s, '_>, state: Arc<WorkerState>) -> Self {
-            Self {
-                obj: Object::new(scope),
-                state,
-            }
-        }
-
-        /// Builds the env, returning the JavaScript value.
-        #[inline(always)]
-        #[must_use]
-        pub fn get_js_value(self) -> Local<'s, Value> {
-            self.obj.cast()
-        }
-    }
+    Some(obj.cast())
 }

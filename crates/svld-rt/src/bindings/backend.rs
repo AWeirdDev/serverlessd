@@ -26,6 +26,9 @@ pub trait BindingBackend {
     /// Gets a handle to this backend.
     fn get_tx(&self) -> BindingBackendTx;
 
+    /// Creates a client from the env name for the worker.
+    fn create_client<K: ToString>(&self, env_name: K) -> Box<dyn BindingClient>;
+
     /// Starts the backend task loop.
     async fn start(&mut self);
 }
@@ -34,4 +37,13 @@ pub trait BindingBackend {
 #[inline(always)]
 pub fn binding_backend_channel() -> (BindingBackendTx, BindingBackendRx) {
     mpsc::unbounded_channel()
+}
+
+/// Represents a binding client.
+///
+/// # Safety
+/// `Send + Sync + 'static`.
+pub trait BindingClient: Send + Sync + 'static {
+    /// Gets the JavaScript interface of the binding.
+    fn get_interface<'s>(&self, scope: &v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>>;
 }

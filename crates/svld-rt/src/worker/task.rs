@@ -17,10 +17,13 @@ use v8::{
 use crate::{
     bindings::BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
+    env::create_js_env,
     intrinsics::{self, JsResponse},
     model::WorkerHttpResponse,
 };
-use svld_language::{ExceptionDetails, ExceptionDetailsExt, Promised, get_bytes, throw};
+use svld_language::{
+    ExceptionDetails, ExceptionDetailsExt, Promised, ThrowException, get_bytes, throw,
+};
 
 use crate::{
     compile,
@@ -304,7 +307,10 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                 let resolver = Local::new(try_catch, gresolver);
                 match result {
                     Ok(callback) => {
-                        let cb = callback(try_catch);
+                        let Some(cb) = callback(try_catch) else {
+                            throw(try_catch, ThrowException::error("failed to resolve"));
+                            continue;
+                        };
                         let value = Local::new(try_catch, cb);
 
                         resolver.resolve(try_catch, value);
@@ -626,19 +632,19 @@ async fn init_worker_for_task(
             }
 
             // env
-            // {
-            //     unwrap_init(
-            //         try_catch,
-            //         || -> Option<()> {
-            //             context_global.set(
-            //                 try_catch,
-            //                 v8::String::new(try_catch, "env")?.cast(),
-            //                 env,
-            //             );
-            //             Some(())
-            //         }(),
-            //     )?;
-            // }
+            {
+                unwrap_init(
+                    try_catch,
+                    || -> Option<()> {
+                        context_global.set(
+                            try_catch,
+                            v8::String::new(try_catch, "env")?.cast(),
+                            create_js_env(try_catch, state.clone())?,
+                        );
+                        Some(())
+                    }(),
+                )?;
+            }
         }
 
         let module = unwrap_compilation(

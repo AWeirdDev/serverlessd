@@ -256,8 +256,22 @@ fn main() {
     }
 }
 
+pub fn start_binding_backends() -> Arc<BindingStore> {
+    Arc::new(
+        BindingStore::new().add_binding(
+            "KV",
+            bindings::kv::KvBackend::new(".serverlessd/binding_kv.db")
+                .expect("failed to initialize binding kv"),
+        ),
+    )
+}
+
 async fn start_one(source: String, addr: SocketAddr, secret: String) {
-    let serverless = Serverless::new_one();
+    let serverless = Serverless::builder()
+        .n_workers(1)
+        .n_pods(1)
+        .binding_store(start_binding_backends())
+        .build();
 
     let worker_url = format!("http://{}/worker/one", addr);
 
@@ -289,13 +303,6 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
     if let Err(e) = handle.await {
         tracing::error!(?e, "error while joining task handle");
     }
-}
-
-pub fn start_binding_backends() -> Arc<BindingStore> {
-    Arc::new(BindingStore::new().add_binding(
-        "kv",
-        bindings::kv::KvBackend::new(".serverlessd/_binding_kv.db").unwrap(),
-    ))
 }
 
 async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr, secret: String) {

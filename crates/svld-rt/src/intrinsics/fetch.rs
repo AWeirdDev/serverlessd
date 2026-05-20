@@ -193,9 +193,10 @@ pub fn fetch(
             state2.schedule_resolution_and_tick(
                 gresolver,
                 Ok(Box::new(move |scope| {
-                    build_fetch_response(scope, status, &final_url, &resp_headers, &bytes)
-                        .map(|o| o.cast())
-                        .unwrap_or_else(|| v8::undefined(scope).cast())
+                    Some(
+                        build_fetch_response(scope, status, &final_url, &resp_headers, &bytes)?
+                            .cast(),
+                    )
                 })),
             );
         })

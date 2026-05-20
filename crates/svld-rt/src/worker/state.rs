@@ -8,14 +8,14 @@ use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
 use svld_language::ThrowException;
 
 use crate::{
-    bindings::BindingStore,
+    bindings::{BindingBackendTx, BindingStore},
     blocks::{Blocks, HttpClientBlock, ReplierBlock},
     pod::{MonitorHandle, PodAsideMonitorHandle},
     triggers::WorkerTx,
 };
 
 type ResolutionCallback =
-    Box<dyn for<'s> FnOnce(&mut v8::PinScope<'s, '_>) -> v8::Local<'s, v8::Value>>;
+    Box<dyn for<'s> FnOnce(&mut v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>>>;
 type ResolutionResult = Result<ResolutionCallback, ThrowException>;
 type PendingResolution = (Global<PromiseResolver>, ResolutionResult);
 
@@ -198,5 +198,10 @@ impl WorkerState {
     /// *(event loop)*
     pub async fn wait_event_loop_tick(&self) {
         self.event_loop_tick.notified().await
+    }
+
+    #[inline(always)]
+    pub fn get_binding<K: AsRef<str>>(&self, name: K) -> Option<BindingBackendTx> {
+        self.binding_store.get_binding_tx(name)
     }
 }
