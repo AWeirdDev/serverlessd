@@ -111,27 +111,12 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
         }
     };
 
-    let Ok(result) = state
+    let res = state
         .serverless
         .send_http_to_worker(pod_id, worker_id)
-        .await
-    else {
-        resp.add_header(
-            HeaderName::from_static("content-type"),
-            HeaderValue::from_static("text/html"),
-            true,
-        )
-        .ok();
+        .await;
 
-        resp.render(
-            ErrorTemplate {
-                reasoning: "Failed to execute worker; an unknown error occurred.",
-            }
-            .to_string(),
-        );
-        return;
-    };
-
+    // this is mandatory!
     {
         let res = state
             .serverless
@@ -141,6 +126,27 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
             tracing::error!("failed to halt task after http is done");
         }
     }
+
+    let result = match res {
+        Ok(t) => t,
+        Err(err) => {
+            tracing::error!("failed to execute worker {}", err);
+            resp.add_header(
+                HeaderName::from_static("content-type"),
+                HeaderValue::from_static("text/html"),
+                true,
+            )
+            .ok();
+
+            resp.render(
+                ErrorTemplate {
+                    reasoning: "Failed to execute worker; an unknown error occurred.",
+                }
+                .to_string(),
+            );
+            return;
+        }
+    };
 
     match result {
         Ok(WorkerHttpResponse {

@@ -1,6 +1,8 @@
 export default {
   async fetch() {
-    env.KV.get("hello");
-    return new Response("hello, world!", { status: 200 });
+    return new Response(JSON.stringify(await env.KV.get("hello")).toString(), {
+      status: 200,
+    });
   },
 };
+z;
