@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, Method, StatusCode};
 
 /// An HTTP response from the worker.
 #[derive(bon::Builder, Debug)]
@@ -12,5 +12,13 @@ pub struct WorkerHttpResponse {
 
     /// The body in bytes.
     /// You can obtain this with `get_bytes()` from the `language` crate.
+    pub body: Bytes,
+}
+
+#[derive(bon::Builder, Debug)]
+pub struct WorkerHttpRequest {
+    pub method: Method,
+    pub url: String,
+    pub headers: HeaderMap,
     pub body: Bytes,
 }

@@ -358,7 +358,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                 return Ok(true);
             }
 
-            WorkerTrigger::Http { reply } => {
+            WorkerTrigger::Http { reply, request } => {
                 tracing::info!("worker received http");
 
                 if let Some(gfetch) = entrypoint_fetch.take() {
@@ -373,7 +373,6 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     let fetch = Local::new(try_catch, gfetch);
 
                     let replier_handle = Box::new(Some(reply));
-
                     let replier_ptr = Box::into_raw(replier_handle);
 
                     state.blocks.with_block::<ReplierBlock, _>(move |shell| {

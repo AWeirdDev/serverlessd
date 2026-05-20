@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{mem, net::SocketAddr, sync::Arc};
 
 use askama::Template;
 use salvo::{
@@ -9,7 +9,10 @@ use salvo::{
 };
 use serde_json::json;
 
-use svld_rt::{model::WorkerHttpResponse, serverless::CreateWorkerError};
+use svld_rt::{
+    model::{WorkerHttpRequest, WorkerHttpResponse},
+    serverless::CreateWorkerError,
+};
 
 use crate::{app_security::AuthMiddleware, handle::ServerlessHandle};
 
@@ -73,6 +76,29 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
     let name = req.param::<String>("name").unwrap();
     let state = depot.obtain::<Arc<AppState>>().unwrap();
 
+    let worker_req = {
+        let Ok(payload) = req.payload().await else {
+            resp.render(
+                ErrorTemplate {
+                    reasoning: "payload too large (>64KB) or failed to load payload",
+                }
+                .to_string(),
+            );
+            return;
+        };
+        WorkerHttpRequest::builder()
+            .body(payload.clone())
+            .headers(mem::take(req.headers_mut()))
+            .method(mem::take(req.method_mut()))
+            .url(
+                req.uri()
+                    .path_and_query()
+                    .map(|path_and_query| path_and_query.to_string())
+                    .unwrap_or_else(|| String::new()),
+            )
+            .build()
+    };
+
     let (pod_id, worker_id) = match state.serverless.create_worker_task(name).await {
         Ok(t) => t,
         Err(err) => {
@@ -113,7 +139,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
 
     let res = state
         .serverless
-        .send_http_to_worker(pod_id, worker_id)
+        .send_http_to_worker(pod_id, worker_id, worker_req)
         .await;
 
     // this is mandatory!

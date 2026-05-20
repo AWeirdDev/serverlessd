@@ -22,7 +22,7 @@ pub type BindingBackendRx = mpsc::UnboundedReceiver<BindingBackendMessage>;
 
 /// A binding backend abstraction.
 #[async_trait]
-pub trait BindingBackend {
+pub trait BindingBackend: Send + 'static {
     /// Gets a handle to this backend.
     fn get_tx(&self) -> BindingBackendTx;
 

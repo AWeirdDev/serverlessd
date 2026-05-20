@@ -3,6 +3,7 @@ use tokio::sync::oneshot;
 
 use svld_rt::{
     blocks::Reply,
+    model::WorkerHttpRequest,
     serverless::{CodeStoreError, CreateWorkerError},
     triggers::{PodTrigger, WorkerTrigger},
 };
@@ -87,13 +88,14 @@ impl ServerlessHandle {
         &self,
         pod: usize,
         wrk: usize,
+        request: WorkerHttpRequest,
     ) -> Result<Reply, ServerlessTriggerError> {
         let (reply, recv) = oneshot::channel();
         self.trigger(ServerlessTrigger::ToPod {
             id: pod,
             trigger: PodTrigger::ToWorker {
                 id: wrk,
-                trigger: WorkerTrigger::Http { reply },
+                trigger: WorkerTrigger::Http { reply, request },
             },
         })
         .await?;

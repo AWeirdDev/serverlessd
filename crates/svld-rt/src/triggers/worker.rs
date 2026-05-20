@@ -1,4 +1,4 @@
-use crate::blocks::Replier;
+use crate::{blocks::Replier, model::WorkerHttpRequest};
 
 use tokio::sync::{mpsc, oneshot};
 
@@ -8,10 +8,7 @@ use crate::worker::WorkerTask;
 #[allow(unused)]
 pub enum WorkerTrigger {
     /// Start a worker task.
-    StartTask {
-        id: usize,
-        task: WorkerTask,
-    },
+    StartTask { id: usize, task: WorkerTask },
 
     /// Stop a task from running.
     ///
@@ -20,6 +17,7 @@ pub enum WorkerTrigger {
     HaltTask,
 
     Http {
+        request: WorkerHttpRequest,
         reply: Replier,
     },
 
@@ -28,9 +26,7 @@ pub enum WorkerTrigger {
     /// # Warning
     /// You may not kill the worker if it's not in
     /// sleeping state. Use `WorkerTrigger::HaltTask` first.
-    Kill {
-        token: oneshot::Sender<()>,
-    },
+    Kill { token: oneshot::Sender<()> },
 }
 
 pub type WorkerTx = mpsc::Sender<WorkerTrigger>;
