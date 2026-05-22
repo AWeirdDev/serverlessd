@@ -21,7 +21,7 @@ impl BindingStore {
     }
 
     /// Pushes a binding to the store.
-    pub fn push_binding<K: ToString, B: BindingBackend + Send + 'static>(
+    pub fn push_spawn_binding<K: ToString, B: BindingBackend + Send + 'static>(
         &mut self,
         name: K,
         mut backend: B,
@@ -38,12 +38,12 @@ impl BindingStore {
 
     /// Adds a binding, then returns `Self`.
     #[inline]
-    pub fn add_binding<K: ToString, B: BindingBackend + Send + 'static>(
+    pub fn add_spawn_binding<K: ToString, B: BindingBackend + Send + 'static>(
         mut self,
         name: K,
         backend: B,
     ) -> Self {
-        self.push_binding(name, backend);
+        self.push_spawn_binding(name, backend);
         self
     }
 
