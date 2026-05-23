@@ -1,7 +1,6 @@
 export default {
   async fetch(_request, env) {
-    await env.KV.put("hello", "world");
-    return new Response(await env.KV.get("hello"), {
+    return new Response(JSON.stringify(Object.keys(env.KV)), {
       status: 200,
     });
   },

@@ -32,16 +32,20 @@ pub struct WranglerConfig {
 
 impl WranglerConfig {
     /// Gets all binding types from the config.
+    ///
+    /// # Returns
+    /// A vector of `(binding_type, binding_name)`.
     #[inline]
-    pub fn get_binding_types(&self) -> Vec<String> {
+    pub fn get_bindings(&self) -> Vec<(String, String)> {
         self.extra
             .iter()
             .filter_map(|(k, v)| {
-                if matches!(
-                    v.as_table().map(|item| item.contains_key("binding")),
-                    Some(true)
-                ) {
-                    Some(k.clone())
+                if let Some(value) = v.as_table().and_then(|item| item.get("binding")) {
+                    if let Some(binding_name) = value.as_str() {
+                        Some((k.clone(), binding_name.to_string()))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }

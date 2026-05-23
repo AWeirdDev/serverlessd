@@ -30,7 +30,7 @@ impl IpcBindingsServer {
         let binding_backends = binding_types
             .into_iter()
             .map(|type_| {
-                let backend = Arc::new(binding_backend::IpcBindingBackend::new(vec![]));
+                let backend = Arc::new(binding_backend::IpcBindingBackend::new());
                 binding_store.push_binding(&type_, backend.clone());
 
                 (type_, backend)
@@ -77,8 +77,6 @@ pub mod binding_backend {
             AtomicBool,  // has data?
             AtomicUsize, // BindingBackendTx
         ),
-
-        functions: Vec<String>,
     }
 
     const _: () = assert!(
@@ -88,10 +86,9 @@ pub mod binding_backend {
 
     impl IpcBindingBackend {
         #[inline(always)]
-        pub const fn new(functions: Vec<String>) -> Self {
+        pub const fn new() -> Self {
             Self {
                 maybe_tx: (AtomicBool::new(false), AtomicUsize::new(0)),
-                functions,
             }
         }
 
@@ -179,12 +176,7 @@ pub mod binding_backend {
 
         #[inline]
         fn create_client(&self, binding_name: &str) -> Box<dyn BindingClient> {
-            Box::new(
-                IpcBindingClient::builder()
-                    .binding_name(binding_name.to_string())
-                    .functions(self.functions.clone())
-                    .build(),
-            )
+            Box::new(IpcBindingClient::new(binding_name.to_string()))
         }
     }
 
@@ -202,54 +194,23 @@ pub mod binding_backend {
 }
 
 mod binding_client {
-    use std::{ffi::c_void, mem};
-
     use svld_language::{ThrowException, throw};
     use tokio::sync::oneshot;
-    use v8::{External, Function, Global, PromiseResolver};
+    use v8::{Function, Global, PromiseResolver};
 
     use crate::{
         bindings::{BindingBackendMessage, backend::BindingClient},
-        utils::OwnedStr,
         worker::WorkerState,
     };
 
     pub struct IpcBindingClient {
-        functions: Vec<OwnedStr>,
-        binding_name: OwnedStr,
+        binding_name: String,
     }
 
-    #[bon::bon]
     impl IpcBindingClient {
-        #[builder]
-        pub fn new(functions: Vec<String>, binding_name: String) -> Self {
-            Self {
-                functions: functions.into_iter().map(|name| name.into()).collect(),
-                binding_name: binding_name.into(),
-            }
-        }
-
         #[inline(always)]
-        const unsafe fn get_static_binding_name(&self) -> &'static OwnedStr {
-            unsafe { mem::transmute(&self.binding_name) }
-        }
-
-        #[inline(always)]
-        const unsafe fn get_binding_name_void_ptr(&self) -> *mut c_void {
-            unsafe { self.get_static_binding_name() as *const OwnedStr as *mut c_void }
-        }
-
-        #[inline(always)]
-        unsafe fn get_static_function_name(&self, idx: usize) -> Option<&'static OwnedStr> {
-            self.functions
-                .get(idx)
-                .map(|item| unsafe { mem::transmute(item) })
-        }
-
-        #[inline(always)]
-        unsafe fn get_function_name_void_ptr(&self, idx: usize) -> Option<*mut c_void> {
-            unsafe { self.get_static_function_name(idx) }
-                .map(|item| item as *const OwnedStr as *mut c_void)
+        pub fn new(binding_name: String) -> Self {
+            Self { binding_name }
         }
     }
 
@@ -258,123 +219,128 @@ mod binding_client {
             &self,
             scope: &v8::PinScope<'s, '_>,
         ) -> Option<v8::Local<'s, v8::Value>> {
-            let binding_name_external_value =
-                External::new(scope, unsafe { self.get_binding_name_void_ptr() });
+            let handler = v8::Object::new(scope);
 
-            let obj = v8::Object::new(scope);
+            let get_fn = v8::Function::builder(
+                |scope: &mut v8::PinScope,
+                 args: v8::FunctionCallbackArguments,
+                 mut rv: v8::ReturnValue| {
+                    let function_name = args.get(1);
+                    let fnk = Function::builder(
+                             |scope: &mut v8::PinScope,
+                              args: v8::FunctionCallbackArguments,
+                              mut rv: v8::ReturnValue| {
+                                 let arr = args.data().cast::<v8::Array>();
 
-            for (function_id, function) in self.functions.iter().enumerate() {
-                let fnk = Function::builder(
-                    |scope: &mut v8::PinScope,
-                     args: v8::FunctionCallbackArguments,
-                     mut rv: v8::ReturnValue| {
-                        let arr = args.data().cast::<v8::Array>();
+                                 let binding_name = arr
+                                     .get_index(scope, 0)
+                                     .unwrap()
+                                     .cast::<v8::String>()
+                                     .to_rust_string_lossy(scope);
+                                 let function_name = arr
+                                     .get_index(scope, 1)
+                                     .unwrap()
+                                     .cast::<v8::String>().
+                                     to_rust_string_lossy(scope);
 
-                        let binding_name_ptr = arr.get_index(scope, 0).unwrap().cast::<External>().value();
-                        let binding_name = unsafe { OwnedStr::from_void_ptr(binding_name_ptr) };
+                                 let state = WorkerState::get_from_isolate(scope);
+                                 let tx = state.get_binding(&binding_name).unwrap();
 
-                        let function_name_ptr = arr.get_index(scope, 1).unwrap().cast::<External>().value();
-                        let function_name = unsafe { OwnedStr::from_void_ptr(function_name_ptr) };
+                                 let args_len = args.length();
+                                 let arr = v8::Array::new(scope, args_len);
+                                 for idx in 0..args_len {
+                                     arr.set_index(scope, idx as u32, args.get(idx));
+                                 }
 
-                        let state = WorkerState::get_from_isolate(scope);
-                        let tx = state.get_binding(binding_name).unwrap();
+                                 if let Some(json_str) = v8::json::stringify(scope, arr.cast()) {
+                                     let Ok(json) = serde_json::from_str::<ijson::IValue>(
+                                         &json_str.to_rust_string_lossy(scope),
+                                     ) else {
+                                         return;
+                                     };
 
-                        let args_len = args.length();
-                        let arr = v8::Array::new(scope, args_len);
-                        for idx in 0..args_len {
-                            arr.set_index(scope, idx as u32, args.get(idx));
-                        }
+                                     let (replier, recv) = oneshot::channel();
 
-                        if let Some(json_str) = v8::json::stringify(scope, arr.cast()) {
-                            let Ok(json) = serde_json::from_str::<ijson::IValue>(
-                                &json_str.to_rust_string_lossy(scope),
-                            ) else {
-                                return;
-                            };
+                                     let Ok(_) = tx.send(
+                                         BindingBackendMessage::builder()
+                                             .args(json)
+                                             .function_name(function_name.to_string())
+                                             .replier(replier)
+                                             .worker(state.name.clone())
+                                             .build(),
+                                     ) else {
+                                         // channel closed
+                                         return;
+                                     };
 
-                            let (replier, recv) = oneshot::channel();
+                                     let Some(resolver) = PromiseResolver::new(scope) else {
+                                         return;
+                                     };
 
-                            let Ok(_) = tx.send(
-                                BindingBackendMessage::builder()
-                                    .args(json)
-                                    .function_name(function_name.to_string())
-                                    .replier(replier)
-                                    .worker(state.name.clone())
-                                    .build(),
-                            ) else {
-                                // channel closed
-                                return;
-                            };
+                                     let gresolver = Global::new(scope, resolver);
+                                     rv.set(resolver.cast());
 
-                            let Some(resolver) = PromiseResolver::new(scope) else {
-                                return;
-                            };
+                                     state.clone().tasks.spawn_local(async move {
+                                         let result = recv.await;
+                                         state.schedule_resolution_and_tick(gresolver, {
+                                             match result {
+                                                 Ok(data) => {
+                                                     Ok(Box::new(move |scope| {
+                                                         let error = data
+                                                             .as_object()
+                                                             .and_then(|item| item.get("error"))
+                                                             .and_then(|item| item.as_string())
+                                                             .map(|item| item.as_str());
 
-                            let gresolver = Global::new(scope, resolver);
-                            rv.set(resolver.cast());
+                                                         if let Some(err) = error {
+                                                             throw(scope, ThrowException::error(err));
+                                                             None
+                                                         } else {
+                                                             let ret = data
+                                                                 .as_object()
+                                                                 .and_then(|item| item.get("data"))
+                                                                 .and_then(|item| serde_json::to_string(item).ok())
+                                                                 .and_then(|item| v8::String::new(scope, &item))
+                                                                 .map(|item| item.cast::<v8::Value>())
+                                                                 .unwrap_or_else(|| v8::undefined(scope).cast());
+                                                             Some(ret)
+                                                         }
+                                                     }))
+                                                 }
 
-                            state.clone().tasks.spawn_local(async move {
-                                let result = recv.await;
-                                state.schedule_resolution_and_tick(gresolver, {
-                                    match result {
-                                        Ok(data) => {
-                                            Ok(Box::new(move |scope| {
-                                                let error = data
-                                                    .as_object()
-                                                    .and_then(|item| item.get("error"))
-                                                    .and_then(|item| item.as_string())
-                                                    .map(|item| item.as_str());
+                                                 Err(_) => Err(ThrowException::error(
+                                                     "failed to receive from binding; the binding server had closed",
+                                                 )),
+                                             }
+                                         });
+                                     });
+                                 }
+                             },
+                         )
+                         .data({
+                             let arr = v8::Array::new(scope, 2);
 
-                                                if let Some(err) = error {
-                                                    throw(scope, ThrowException::error(err));
-                                                    None
-                                                } else {
-                                                    let ret = data
-                                                        .as_object()
-                                                        .and_then(|item| item.get("data"))
-                                                        .and_then(|item| serde_json::to_string(item).ok())
-                                                        .and_then(|item| v8::String::new(scope, &item))
-                                                        .map(|item| item.cast::<v8::Value>())
-                                                        .unwrap_or_else(|| v8::undefined(scope).cast());
-                                                    Some(ret)
-                                                }
-                                            }))
-                                        }
+                             arr.set_index(scope, 0, args.data());
+                             arr.set_index(scope, 1, function_name);
 
-                                        Err(_) => Err(ThrowException::error(
-                                            "failed to receive from binding; the binding server had closed",
-                                        )),
-                                    }
-                                });
-                            });
-                        }
-                    },
-                )
-                .data({
-                    let arr = v8::Array::new(scope, 2);
+                             arr.cast()
+                         })
+                         .build(scope)
+                         .unwrap();
 
-                    arr.set_index(scope, 0, binding_name_external_value.cast());
-                    arr.set_index(
-                        scope,
-                        1,
-                        External::new(
-                            scope,
-                            unsafe { self.get_function_name_void_ptr(function_id).unwrap() }
-                        ).cast()
-                    );
+                    rv.set(fnk.cast());
+                },
+            )
+            .data(v8::String::new(scope, &self.binding_name)?.cast())
+            .build(scope)?;
 
-                    arr.cast()
-                })
-                .build(scope)?;
+            handler.set(scope, v8::String::new(scope, "get")?.cast(), get_fn.cast());
 
-                obj.set(
-                    scope,
-                    v8::String::new(scope, function.as_str())?.cast(),
-                    fnk.cast(),
-                );
-            }
+            // new Proxy({}, handler)
+            let target = v8::Object::new(scope);
+            let proxy = v8::Proxy::new(scope, target, handler)?;
 
-            Some(obj.cast())
+            Some(proxy.cast())
         }
     }
 }
@@ -430,14 +396,6 @@ mod task {
         // type of the binding
         let binding_type = recv.read_parse_to_string().await?;
         tracing::info!("got binding type {binding_type}");
-
-        let functions_len = recv.read_u32_le().await?;
-        let mut functions = Vec::with_capacity(functions_len as usize);
-        for _ in 0..functions_len {
-            let function = recv.read_parse_to_string().await?;
-            functions.push(function);
-        }
-        tracing::info!("{binding_type} has registered {functions_len} functions");
 
         if let Err(err) = binding_connections.set_connected(&binding_type) {
             tracing::error!("failed to set to connected, reason: {err:?}");

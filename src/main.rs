@@ -18,7 +18,7 @@ use bytes::Bytes;
 use clap::Parser;
 use svld_rt::{
     bindings::{BindingStore, ipc},
-    models::WorkerConfig,
+    models::{BindingConfig, WorkerConfig},
     serverless::Serverless,
 };
 use svld_wrangler_config::WranglerConfig;
@@ -73,7 +73,7 @@ struct OneArgs {
     #[arg(long, required = false)]
     host: Option<String>,
 
-    /// The types of bindings to use.
+    /// The types of bindings the users are allowed to use.
     #[arg(long)]
     bindings: Option<Vec<String>>,
 }
@@ -99,7 +99,7 @@ struct RunArgs {
     #[arg(long, required = true)]
     workers_per_pod: usize,
 
-    /// The types of bindings to use.
+    /// The types of bindings the users are allowed to use.
     #[arg(long)]
     bindings: Option<Vec<String>>,
 }
@@ -149,7 +149,12 @@ fn main() {
                 }
             };
 
-            let source = read_file_to_string(&args.config);
+            let config_dir = args
+                .config
+                .parent()
+                .expect("couldn't find any parent above the config");
+
+            let source = read_file_to_string(&config_dir.join(&config.main));
 
             rt.block_on(start_one(
                 source,
@@ -159,6 +164,7 @@ fn main() {
                     args.port.unwrap_or(3000),
                 ),
                 config,
+                args.bindings.unwrap_or_default(),
             ));
             rt.shutdown_background();
         }
@@ -278,12 +284,16 @@ fn start_binding_backends(binding_types: Vec<String>) -> Arc<BindingStore> {
     Arc::new(store)
 }
 
-async fn start_one(source: String, addr: SocketAddr, config: WranglerConfig) {
-    let binding_types = config.get_binding_types();
+async fn start_one(
+    source: String,
+    addr: SocketAddr,
+    config: WranglerConfig,
+    allowed_binding_types: Vec<String>,
+) {
     let serverless = Serverless::builder()
         .n_workers(1)
         .n_pods(1)
-        .binding_store(start_binding_backends(binding_types))
+        .binding_store(start_binding_backends(allowed_binding_types))
         .build();
 
     let worker_url = format!("http://{}/worker/one", addr);
@@ -304,7 +314,15 @@ async fn start_one(source: String, addr: SocketAddr, config: WranglerConfig) {
         .upload_worker(
             Bytes::from_owner(source),
             WorkerConfig::builder()
-                .bindings(vec![])
+                .bindings(
+                    config
+                        .get_bindings()
+                        .into_iter()
+                        .map(|(type_, name)| {
+                            BindingConfig::builder().type_(type_).name(name).build()
+                        })
+                        .collect::<Vec<_>>(),
+                )
                 .name("one".to_string())
                 .build(),
         )
@@ -327,12 +345,12 @@ async fn start(
     n_workers: usize,
     n_workers_per_pod: usize,
     addr: SocketAddr,
-    binding_types: Vec<String>,
+    allowed_binding_types: Vec<String>,
 ) {
     let serverless = Serverless::builder()
         .n_workers(n_workers)
         .n_pods(n_workers_per_pod)
-        .binding_store(start_binding_backends(binding_types))
+        .binding_store(start_binding_backends(allowed_binding_types))
         .build();
 
     let (_svl, handle) = {
