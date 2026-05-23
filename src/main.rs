@@ -222,22 +222,6 @@ fn main() {
                 println!("=====> created dir {:?}", &workers_path);
             }
 
-            let env_path = PathBuf::from(".env");
-            if env_path.exists() {
-                println!("=====! .env file already exists in this directory, add:\n");
-                println!("          SERVERLESSD_SECRET=<some-32-byte-secret>\n");
-                println!("       ...in order to start the server.");
-            } else {
-                if let Err(e) = fs::write(&env_path, "SERVERLESSD_SECRET=xxx") {
-                    eprintln!("=====x error: failed to create env file {:?}", &env_path);
-                    eprintln!("       error: {}", &e.to_string());
-                    return;
-                }
-
-                println!("=====> env file created at {:?}", &env_path);
-                println!("       edit it and add your 32-byte secret");
-            }
-
             println!("\n=====> initialized. use `.gitignore` if you're using git version control.");
         }
     }
