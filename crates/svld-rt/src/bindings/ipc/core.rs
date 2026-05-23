@@ -375,7 +375,7 @@ mod binding_client {
                 );
             }
 
-            None
+            Some(obj.cast())
         }
     }
 }
