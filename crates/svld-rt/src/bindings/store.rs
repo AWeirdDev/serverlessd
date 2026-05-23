@@ -106,8 +106,8 @@ pub struct BindingItem {
 
 impl BindingItem {
     #[inline(always)]
-    pub fn create_client(&self, name: &str) -> Box<dyn BindingClient> {
-        self.backend.create_client(name)
+    pub fn create_client(&self) -> Box<dyn BindingClient> {
+        self.backend.create_client()
     }
 
     #[inline(always)]

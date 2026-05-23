@@ -1,6 +1,7 @@
 export default {
   async fetch(_request, env) {
-    return new Response(JSON.stringify(Object.keys(env.KV)), {
+    let hello = await env.KV.get("hello");
+    return new Response(JSON.stringify(hello), {
       status: 200,
     });
   },

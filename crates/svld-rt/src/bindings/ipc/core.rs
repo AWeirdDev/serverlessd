@@ -30,7 +30,7 @@ impl IpcBindingsServer {
         let binding_backends = binding_types
             .into_iter()
             .map(|type_| {
-                let backend = Arc::new(binding_backend::IpcBindingBackend::new());
+                let backend = Arc::new(binding_backend::IpcBindingBackend::new(type_.clone()));
                 binding_store.push_binding(&type_, backend.clone());
 
                 (type_, backend)
@@ -73,6 +73,7 @@ pub mod binding_backend {
     use crate::bindings::{BindingBackend, BindingBackendTx, backend::BindingClient};
 
     pub struct IpcBindingBackend {
+        type_: String,
         maybe_tx: (
             AtomicBool,  // has data?
             AtomicUsize, // BindingBackendTx
@@ -86,8 +87,9 @@ pub mod binding_backend {
 
     impl IpcBindingBackend {
         #[inline(always)]
-        pub const fn new() -> Self {
+        pub fn new(type_: String) -> Self {
             Self {
+                type_,
                 maybe_tx: (AtomicBool::new(false), AtomicUsize::new(0)),
             }
         }
@@ -137,7 +139,10 @@ pub mod binding_backend {
 
             // SAFETY: we asserted BindingBackendTx is usize-sized;
             // the bool guard ensures this was previously set via set_tx.
-            Some(unsafe { mem::transmute::<usize, BindingBackendTx>(raw) })
+            Some(unsafe {
+                let tx = mem::ManuallyDrop::new(mem::transmute::<usize, BindingBackendTx>(raw));
+                (*tx).clone()
+            })
         }
 
         #[inline(always)]
@@ -175,8 +180,8 @@ pub mod binding_backend {
         }
 
         #[inline]
-        fn create_client(&self, binding_name: &str) -> Box<dyn BindingClient> {
-            Box::new(IpcBindingClient::new(binding_name.to_string()))
+        fn create_client(&self) -> Box<dyn BindingClient> {
+            Box::new(IpcBindingClient::new(self.type_.clone()))
         }
     }
 
@@ -204,13 +209,13 @@ mod binding_client {
     };
 
     pub struct IpcBindingClient {
-        binding_name: String,
+        binding_type: String,
     }
 
     impl IpcBindingClient {
         #[inline(always)]
-        pub fn new(binding_name: String) -> Self {
-            Self { binding_name }
+        pub fn new(binding_type: String) -> Self {
+            Self { binding_type }
         }
     }
 
@@ -232,7 +237,7 @@ mod binding_client {
                               mut rv: v8::ReturnValue| {
                                  let arr = args.data().cast::<v8::Array>();
 
-                                 let binding_name = arr
+                                 let binding_type = arr
                                      .get_index(scope, 0)
                                      .unwrap()
                                      .cast::<v8::String>()
@@ -244,7 +249,7 @@ mod binding_client {
                                      to_rust_string_lossy(scope);
 
                                  let state = WorkerState::get_from_isolate(scope);
-                                 let tx = state.get_binding(&binding_name).unwrap();
+                                 let tx = state.get_binding_tx(&binding_type).unwrap();
 
                                  let args_len = args.length();
                                  let arr = v8::Array::new(scope, args_len);
@@ -331,7 +336,7 @@ mod binding_client {
                     rv.set(fnk.cast());
                 },
             )
-            .data(v8::String::new(scope, &self.binding_name)?.cast())
+            .data(v8::String::new(scope, &self.binding_type)?.cast())
             .build(scope)?;
 
             handler.set(scope, v8::String::new(scope, "get")?.cast(), get_fn.cast());
@@ -348,7 +353,7 @@ mod binding_client {
 mod task {
     use std::{
         collections::HashMap,
-        io::{self, IoSlice},
+        io,
         string::FromUtf8Error,
         sync::{
             Arc,
@@ -432,6 +437,28 @@ mod task {
         let (tx, mut rx) = binding_backend_channel();
         backend.set_tx(tx)?;
 
+        // spawn dedicated reader so it's never cancelled
+        let (external_tx, mut external_rx) = tokio::sync::mpsc::channel::<Message>(32);
+
+        tokio::spawn(async move {
+            loop {
+                match recv.read_parse_message().await {
+                    Ok(msg) => {
+                        if external_tx.send(msg).await.is_err() {
+                            tracing::error!("errored on sending external tx");
+                            break; // main task dropped, exit
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "failed to read & parse binding client message, breaking: {e:?}"
+                        );
+                        break;
+                    }
+                }
+            }
+        });
+
         let mut resolutions = HashMap::new();
         let mut roll_id = 0_u32;
 
@@ -445,22 +472,20 @@ mod task {
             }
 
             let event = tokio::select! {
-                msg = rx.recv() => {
-                    match msg {
-                        Some(t) => Event::Internal(t),
-                        None => break,
+                msg = rx.recv() => match msg {
+                    Some(t) => Event::Internal(t),
+                    None => {
+                        tracing::error!("internal channel closed: backend dropped?");
+                        break;
                     }
                 },
-
-                msg = recv.read_parse_message() => {
-                    match msg {
-                        Ok(t) => Event::External(t),
-                        Err(e) => {
-                            tracing::error!("failed to read & parse binding sclient message, breaking: {e:?}");
-                            break;
-                        }
+                msg = external_rx.recv() => match msg {
+                    Some(t) => Event::External(t),
+                    None => {
+                        tracing::error!("reader task died");
+                        break;
                     }
-                }
+                },
             };
 
             match event {
@@ -480,6 +505,7 @@ mod task {
                 }
 
                 Event::External(Message { id, payload }) => {
+                    tracing::debug!("server finished reading payload for id={id}");
                     if let Some(replier) = resolutions.remove(&id) {
                         let _ = replier.send(payload);
                     }
@@ -536,6 +562,7 @@ mod task {
             // get this over with, and we're just reading from them
 
             let len = self.read_u32_le().await? as usize;
+
             let mut buf = Box::<[u8]>::new_uninit_slice(len);
 
             let slice = unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, len) };
@@ -557,6 +584,7 @@ mod task {
 
             // then we'll get the payload
             let raw_payload = self.read_parse_to_boxed_arr().await?;
+
             let payload = serde_json::from_slice::<ijson::IValue>(&raw_payload)?;
 
             // good. fuck you and eat it up
@@ -572,17 +600,15 @@ mod task {
     #[async_trait]
     impl SendExt for SendHalf {
         async fn send_message(&mut self, message: Message) -> Result<(), SingleTaskError> {
-            let id_raw = message.id.to_le_bytes();
-
             let payload_raw = serde_json::to_vec(&message.payload)?;
-            let len_raw = (payload_raw.len() as u32).to_le_bytes();
 
-            let slices = [
-                IoSlice::new(&id_raw),
-                IoSlice::new(&len_raw),
-                IoSlice::new(&payload_raw),
-            ];
-            self.write_vectored(&slices).await?;
+            let mut buf = Vec::with_capacity(size_of::<u32>() * 2 + payload_raw.len());
+
+            buf.extend_from_slice(&message.id.to_le_bytes());
+            buf.extend_from_slice(&(payload_raw.len() as u32).to_le_bytes());
+            buf.extend_from_slice(&payload_raw);
+
+            self.write_all(&buf).await?;
 
             // fah
             Ok(())

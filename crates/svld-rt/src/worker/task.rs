@@ -295,7 +295,6 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
             tracing::info!("resolving event loop");
 
             let isolate = unsafe { state.get_isolate() };
-            tracing::info!("creating scope with context");
             scope_with_context!(
                 isolate: isolate,
                 let &mut scope,

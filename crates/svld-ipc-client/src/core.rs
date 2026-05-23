@@ -4,12 +4,7 @@
 //! let mut client = BindingClient::connect(PathBuf::from(".serverlessd/bindings.sock")).await?;
 //! ```
 
-use std::{
-    io::{self, IoSlice},
-    marker::PhantomData,
-    mem,
-    path::PathBuf,
-};
+use std::{io, marker::PhantomData, mem, path::PathBuf};
 
 use interprocess::local_socket::{
     ConnectOptions, GenericFilePath,
@@ -75,21 +70,17 @@ impl BindingClient<Initialized> {
         &mut self,
         message: ClientMessage<Result<T, String>>,
     ) -> Result<(), BindingClientError> {
-        let id_raw = message.id.to_le_bytes();
         let payload_raw = serde_json::to_vec(&match message.payload {
             Ok(t) => serde_json::json!({"data": &t}),
             Err(e) => serde_json::json!({"error": &e}),
         })?;
 
-        let len_raw = (payload_raw.len() as u32).to_le_bytes();
+        let mut buf = Vec::with_capacity(size_of::<u32>() * 2 + payload_raw.len());
+        buf.extend_from_slice(&message.id.to_le_bytes());
+        buf.extend_from_slice(&(payload_raw.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&payload_raw);
 
-        let slices = [
-            IoSlice::new(&id_raw),
-            IoSlice::new(&len_raw),
-            IoSlice::new(&payload_raw),
-        ];
-
-        self.send.write_vectored(&slices).await?;
+        self.send.write_all(&buf).await?;
 
         Ok(())
     }
@@ -129,6 +120,7 @@ impl BindingClient<Initialized> {
         &mut self,
     ) -> Result<ServerMessage<T>, BindingClientError> {
         let id = self.recv.read_u32_le().await?;
+        tracing::info!("got id={id}");
 
         let data_len = self.recv.read_u32_le().await? as usize;
         let mut data = Box::<[u8]>::new_uninit_slice(data_len);
@@ -136,7 +128,11 @@ impl BindingClient<Initialized> {
             unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, data_len) };
         self.recv.read_exact(slice).await?;
 
-        let UnprocessedServerMessage { func, data, worker } = serde_json::from_slice(slice)?;
+        let UnprocessedServerMessage {
+            func,
+            args: data,
+            worker,
+        } = serde_json::from_slice(slice)?;
 
         Ok(ServerMessage {
             id,
@@ -145,6 +141,8 @@ impl BindingClient<Initialized> {
             args: ijson::from_value::<T>(&data)?,
         })
     }
+
+    // pub async fn shutdown(&mut self) {}
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -173,7 +171,7 @@ pub struct ClientMessage<T> {
 #[derive(Deserialize)]
 struct UnprocessedServerMessage {
     func: String,
-    data: ijson::IValue,
+    args: ijson::IValue,
     worker: String,
 }
 

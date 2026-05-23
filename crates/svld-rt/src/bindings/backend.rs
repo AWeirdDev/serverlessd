@@ -28,7 +28,7 @@ pub trait BindingBackend: Send + Sync + 'static {
     fn get_tx(&self) -> BindingBackendTx;
 
     /// Creates a client from the env name for the worker.
-    fn create_client(&self, binding_name: &str) -> Box<dyn BindingClient>;
+    fn create_client(&self) -> Box<dyn BindingClient>;
 }
 
 /// Creates a binding backend channel.

@@ -16,7 +16,7 @@ pub fn create_js_env<'s>(
         tracing::info!("js env got name={name:?}, type={type_:?}");
         let binding = state.binding_store.get_binding(&type_)?;
 
-        let client = binding.create_client(&name);
+        let client = binding.create_client();
 
         let interface = client.create_interface(scope)?;
 

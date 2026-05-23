@@ -67,6 +67,8 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
             }
         };
 
+        tracing::info!("worker {:?}: {}(...)", worker_name, function_name);
+
         let tree = match db.open_tree(&worker_name) {
             Ok(t) => t,
             Err(e) => {
@@ -122,6 +124,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
 
         match &payload {
             KvPayload::Get { key } => {
+                tracing::info!("sending...");
                 match tree.get(&key) {
                     Ok(Some(data)) => {
                         let s = String::from_utf8_lossy(&data);
@@ -129,7 +132,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
                     }
 
                     Ok(None) => {
-                        client.send_ok(id, payload).await?;
+                        client.send_ok(id, ijson::ijson!(null)).await?;
                     }
 
                     Err(e) => {
