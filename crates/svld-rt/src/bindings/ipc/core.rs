@@ -206,7 +206,7 @@ mod binding_client {
 
     use svld_language::{ThrowException, throw};
     use tokio::sync::oneshot;
-    use v8::{External, FunctionTemplate, Global, PromiseResolver};
+    use v8::{External, Function, Global, PromiseResolver};
 
     use crate::{
         bindings::{BindingBackendMessage, backend::BindingClient},
@@ -264,7 +264,7 @@ mod binding_client {
             let obj = v8::Object::new(scope);
 
             for (function_id, function) in self.functions.iter().enumerate() {
-                let fnk = FunctionTemplate::builder(
+                let fnk = Function::builder(
                     |scope: &mut v8::PinScope,
                      args: v8::FunctionCallbackArguments,
                      mut rv: v8::ReturnValue| {
@@ -365,8 +365,7 @@ mod binding_client {
 
                     arr.cast()
                 })
-                .build(scope)
-                .get_function(scope)?;
+                .build(scope)?;
 
                 obj.set(
                     scope,
