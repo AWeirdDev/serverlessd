@@ -2,7 +2,7 @@ use std::{cell::OnceCell, ptr::NonNull};
 
 use tokio::sync::oneshot;
 
-use crate::{model::WorkerHttpResponse, worker::WorkerError};
+use crate::{models::WorkerHttpResponse, worker::WorkerError};
 
 use crate::blocks::Block;
 

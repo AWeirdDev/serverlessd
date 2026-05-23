@@ -8,7 +8,7 @@ mod utils;
 // public modules
 pub mod bindings;
 pub mod blocks;
-pub mod model;
+pub mod models;
 pub mod pod;
 pub mod serverless;
 pub mod triggers;

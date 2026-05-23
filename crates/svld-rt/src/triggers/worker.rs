@@ -1,4 +1,4 @@
-use crate::{blocks::Replier, model::WorkerHttpRequest};
+use crate::{blocks::Replier, models::WorkerHttpRequest};
 
 use tokio::sync::{mpsc, oneshot};
 

@@ -3,7 +3,7 @@ use tokio::sync::oneshot;
 
 use svld_rt::{
     blocks::Reply,
-    model::WorkerHttpRequest,
+    models::WorkerHttpRequest,
     serverless::{CodeStoreError, CreateWorkerError},
     triggers::{PodTrigger, WorkerTrigger},
 };

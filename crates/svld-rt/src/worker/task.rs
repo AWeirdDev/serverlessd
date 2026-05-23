@@ -19,7 +19,7 @@ use crate::{
     blocks::{MaybeReplier, ReplierBlock},
     env::create_js_env,
     intrinsics::{self, JsResponse},
-    model::WorkerHttpResponse,
+    models::WorkerHttpResponse,
 };
 use svld_language::{
     ExceptionDetails, ExceptionDetailsExt, Promised, ThrowException, get_bytes, throw,

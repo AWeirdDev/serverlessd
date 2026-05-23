@@ -10,7 +10,7 @@ use salvo::{
 use serde_json::json;
 
 use svld_rt::{
-    model::{WorkerHttpRequest, WorkerHttpResponse},
+    models::{WorkerHttpRequest, WorkerHttpResponse},
     serverless::CreateWorkerError,
 };
 
