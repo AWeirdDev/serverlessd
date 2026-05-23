@@ -485,25 +485,23 @@ mod task {
 
     #[async_trait]
     trait SendExt {
-        async fn send_raw_data(&mut self, data: &[u8]) -> Result<(), SingleTaskError>;
         async fn send_message(&mut self, message: Message) -> Result<(), SingleTaskError>;
     }
 
     #[async_trait]
     impl SendExt for SendHalf {
-        async fn send_raw_data(&mut self, data: &[u8]) -> Result<(), SingleTaskError> {
-            let len_raw = (data.len() as u32).to_le_bytes();
-            let slices = [IoSlice::new(&len_raw), IoSlice::new(&data)];
-            self.write_vectored(&slices).await?;
-            Ok(())
-        }
-
         async fn send_message(&mut self, message: Message) -> Result<(), SingleTaskError> {
-            let payload_raw = serde_json::to_vec(&message.payload)?;
             let id_raw = message.id.to_le_bytes();
 
-            let buf = Vec::with_capacity(payload_raw.len() + id_raw.len());
-            self.send_raw_data(&buf).await?;
+            let payload_raw = serde_json::to_vec(&message.payload)?;
+            let len_raw = (payload_raw.len() as u32).to_le_bytes();
+
+            let slices = [
+                IoSlice::new(&id_raw),
+                IoSlice::new(&len_raw),
+                IoSlice::new(&payload_raw),
+            ];
+            self.write_vectored(&slices).await?;
 
             // fah
             Ok(())
