@@ -35,12 +35,6 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
 
     let mut client = connect()
         .binding_type("kv".into())
-        .function_names(vec![
-            "get".into(),
-            "delete".into(),
-            "put".into(),
-            "list".into(),
-        ])
         .path(socket_path)
         .call()
         .await?

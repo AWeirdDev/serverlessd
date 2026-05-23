@@ -25,7 +25,6 @@ pub struct Initialized;
 pub async fn connect(
     path: PathBuf,
     binding_type: String,
-    function_names: Vec<String>,
 ) -> Result<BindingClient<Uninitialized>, BindingClientError> {
     let name = path
         .to_fs_name::<GenericFilePath>()
@@ -40,7 +39,6 @@ pub async fn connect(
     Ok(BindingClient {
         send,
         recv,
-        function_names,
         type_: binding_type,
         _phantom: PhantomData,
     })
@@ -51,7 +49,6 @@ pub struct BindingClient<State = Uninitialized> {
     send: SendHalf,
     recv: RecvHalf,
 
-    function_names: Vec<String>,
     type_: String,
 
     _phantom: PhantomData<State>,
@@ -64,11 +61,6 @@ impl BindingClient<Uninitialized> {
     ) -> Result<BindingClient<Initialized>, BindingClientError> {
         let mut buf = vec![];
         extend_raw_str(&mut buf, &self.type_);
-
-        buf.extend_from_slice(&(self.function_names.len() as u32).to_le_bytes());
-        for function_name in self.function_names.iter() {
-            extend_raw_str(&mut buf, function_name);
-        }
 
         self.send.write_all(&buf).await?;
 
