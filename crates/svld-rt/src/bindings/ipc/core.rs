@@ -148,28 +148,23 @@ pub mod binding_backend {
         #[inline(always)]
         #[must_use]
         pub fn take_atomic_tx(&self) -> Option<BindingBackendTx> {
-            takeaway(&self.maybe_tx.0, &self.maybe_tx.1)
+            if !self.maybe_tx.0.load(atomic::Ordering::Acquire) {
+                return None;
+            }
+
+            let raw = self.maybe_tx.1.swap(0, atomic::Ordering::AcqRel);
+            if raw == 0 {
+                return None;
+            }
+
+            // SAFETY: T is asserted to be usize-sized; value was stored via transmute
+            Some(unsafe { mem::transmute::<usize, BindingBackendTx>(raw) })
         }
 
         #[inline]
         pub fn deoccupy(&self) {
             self.maybe_tx.0.store(false, atomic::Ordering::Release);
         }
-    }
-
-    #[inline]
-    fn takeaway<T>(whether: &AtomicBool, item: &AtomicUsize) -> Option<T> {
-        if !whether.load(atomic::Ordering::Acquire) {
-            return None;
-        }
-
-        let raw = item.swap(0, atomic::Ordering::AcqRel);
-        if raw == 0 {
-            return None;
-        }
-
-        // SAFETY: T is asserted to be usize-sized; value was stored via transmute
-        Some(unsafe { mem::transmute_copy::<usize, T>(&raw) })
     }
 
     impl BindingBackend for IpcBindingBackend {
