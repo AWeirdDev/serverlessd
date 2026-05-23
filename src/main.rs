@@ -253,7 +253,7 @@ fn start_binding_backends() -> Arc<BindingStore> {
     let mut store = BindingStore::new();
 
     start_ipc_server(
-        PathBuf::from(".serverlessd/server.sock"),
+        PathBuf::from(".serverlessd/bindings.sock"),
         vec![],
         &mut store,
     );

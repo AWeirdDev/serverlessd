@@ -1,7 +1,7 @@
 //! Implementation of the serverlessd bindings protocol with `serde` integration.
 //!
 //! ```no_run
-//! let mut client = BindingClient::connect().await?;
+//! let mut client = BindingClient::connect(PathBuf::from(".serverlessd/bindings.sock")).await?;
 //! ```
 
 use std::{
