@@ -1,7 +1,6 @@
 export default {
-  async fetch() {
-    env.KV.put("money", "ties");
-    return new Response(env.KV.get("money"), {
+  async fetch(request) {
+    return new Response(request.url, {
       status: 200,
       headers: {
         "Content-Type": "text/html",

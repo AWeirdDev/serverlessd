@@ -794,24 +794,31 @@ fn worker_http_request_to_js_obj<'s>(
         url,
     }: WorkerHttpRequest,
 ) -> Option<v8::Local<'s, v8::Value>> {
-    JsRequest::builder(scope, &url)?
-        .body_bytes(scope, &body)?
-        .method(scope, method)?
-        .headers(scope, {
-            let jsh = v8::Object::new(scope);
+    {
+        let mut builder = JsRequest::builder(scope, &url)?;
 
-            for (maybe_key, value) in headers.drain() {
-                if let Some(key) = maybe_key {
-                    jsh.set(
-                        scope,
-                        v8::String::new(scope, key.as_str())?.cast(),
-                        v8::String::new(scope, value.to_str().unwrap_or(""))?.cast(),
-                    );
-                }
+        if !matches!(method, http::Method::GET | http::Method::HEAD) {
+            builder = builder.body_bytes(scope, &body)?;
+        }
+
+        builder
+    }
+    .method(scope, method)?
+    .headers(scope, {
+        let jsh = v8::Object::new(scope);
+
+        for (maybe_key, value) in headers.drain() {
+            if let Some(key) = maybe_key {
+                jsh.set(
+                    scope,
+                    v8::String::new(scope, key.as_str())?.cast(),
+                    v8::String::new(scope, value.to_str().unwrap_or(""))?.cast(),
+                );
             }
+        }
 
-            jsh
-        })?
-        .build(scope)
-        .map(|item| item.cast())
+        jsh
+    })?
+    .build(scope)
+    .map(|item| item.cast())
 }
