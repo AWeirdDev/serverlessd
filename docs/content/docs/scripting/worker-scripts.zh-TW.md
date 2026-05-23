@@ -31,7 +31,7 @@ Worker Script 必須符合以下要求：
 ```js
 export default {
   // 當有 request 進來時會呼叫這個函式
-  async fetch() {
+  async fetch(request, env) {
     // 你可以做一些稍微重一點的運算，
     // 只要累積時間低於 10ms 即可
     for (let i = 0; i < 100; i++) {

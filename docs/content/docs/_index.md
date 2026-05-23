@@ -72,3 +72,7 @@ Additionally, a human was always in the loop, because they couldn't code or thin
 
 ## Club expo
 [latent 2026](https://exhibit.ckefgisc.org/)
+
+{{< cards >}}
+  {{< card link="./getting-started" title="Getting Started" icon="star" >}}
+{{< /cards >}}

@@ -2,6 +2,7 @@
 title: "腳本撰寫"
 sidebar:
   open: true
+weight: 2
 ---
 
 在 `serverlessd` 中，由於它是一個以 JavaScript 為基礎的執行環境，因此 Worker Script 也是使用 JavaScript 撰寫。

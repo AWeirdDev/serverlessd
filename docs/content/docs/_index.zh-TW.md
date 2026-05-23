@@ -83,5 +83,3 @@ curl -fsSL https://svld.aweird.me/install.sh | sh
 
 - 活動時間：05/31 （日）10:30~17:00
 - 活動地點：建中夢紅樓一樓
-
-欸幹有沒有人 5/30 要去看 Backrooms 揪揪揪揪

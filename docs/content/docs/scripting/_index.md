@@ -2,6 +2,7 @@
 title: "Scripting"
 sidebar:
   open: true
+weight: 2
 ---
 
 In `serverlessd`, since it's a JavaScript-based runtime, you write worker scripts in JavaScript.

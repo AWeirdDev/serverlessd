@@ -1,7 +1,7 @@
 ---
 date: '2026-05-16T23:19:24+08:00'
 draft: false
-title: 'Worker scripts'
+title: 'Worker Scripts'
 cascade:
   type: docs
 ---
@@ -28,7 +28,7 @@ Below is a simple worker that says "Hello, world!" to every HTTP request that co
 ```js
 export default {
   // This gets called when a request comes in
-  async fetch() {
+  async fetch(request, env) {
     // You can do some heavy calculation, as long as the 
     // accumulated time is <10ms
     for (let i = 0; i < 100; i++) {
