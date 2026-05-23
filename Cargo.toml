@@ -30,4 +30,7 @@ members = [
     "crates/svld-language",
     "crates/svld-rt",
     "crates/svld-ipc-client",
+
+    # binaries
+    "crates/svld-binding-kv",
 ]

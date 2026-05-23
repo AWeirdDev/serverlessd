@@ -70,6 +70,10 @@ struct OneArgs {
     /// The host to run.
     #[arg(long, required = false)]
     host: Option<String>,
+
+    /// The types of bindings to use.
+    #[arg(long)]
+    bindings: Vec<String>,
 }
 
 #[derive(clap::Args)]
@@ -92,6 +96,10 @@ struct RunArgs {
     /// can be reduced.
     #[arg(long, required = true)]
     workers_per_pod: usize,
+
+    /// The types of bindings to use.
+    #[arg(long)]
+    bindings: Vec<String>,
 }
 
 #[derive(clap::Args)]
@@ -145,6 +153,7 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
+                args.bindings,
             ));
             rt.shutdown_background();
         }
@@ -165,6 +174,7 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
+                args.bindings,
             ));
             rt.shutdown_background();
         }
@@ -249,23 +259,25 @@ fn start_ipc_server(
     tokio::task::spawn(server.start());
 }
 
-fn start_binding_backends() -> Arc<BindingStore> {
+fn start_binding_backends(binding_types: Vec<String>) -> Arc<BindingStore> {
+    tracing::info!("binding types to use: {binding_types:?}");
+
     let mut store = BindingStore::new();
 
     start_ipc_server(
         PathBuf::from(".serverlessd/bindings.sock"),
-        vec![],
+        binding_types,
         &mut store,
     );
 
     Arc::new(store)
 }
 
-async fn start_one(source: String, addr: SocketAddr) {
+async fn start_one(source: String, addr: SocketAddr, binding_types: Vec<String>) {
     let serverless = Serverless::builder()
         .n_workers(1)
         .n_pods(1)
-        .binding_store(start_binding_backends())
+        .binding_store(start_binding_backends(binding_types))
         .build();
 
     let worker_url = format!("http://{}/worker/one", addr);
@@ -305,11 +317,16 @@ async fn start_one(source: String, addr: SocketAddr) {
     }
 }
 
-async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr) {
+async fn start(
+    n_workers: usize,
+    n_workers_per_pod: usize,
+    addr: SocketAddr,
+    binding_types: Vec<String>,
+) {
     let serverless = Serverless::builder()
         .n_workers(n_workers)
         .n_pods(n_workers_per_pod)
-        .binding_store(start_binding_backends())
+        .binding_store(start_binding_backends(binding_types))
         .build();
 
     let (_svl, handle) = {

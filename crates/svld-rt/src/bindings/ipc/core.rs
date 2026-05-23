@@ -65,7 +65,7 @@ pub enum IpcConnectionError {
 
 pub mod binding_backend {
     use std::{
-        mem, ptr,
+        mem,
         sync::atomic::{self, AtomicBool, AtomicUsize},
     };
 
@@ -136,12 +136,11 @@ pub mod binding_backend {
             // SAFETY: it's impossible to set back to `None`.
             // once it's set, it cannot be altered. so race conditions
             // do not apply here.
-            let tx = unsafe {
-                &*(self.tx_rx.1.load(atomic::Ordering::Acquire) as *const BindingBackendTx)
-            }
-            .clone();
+            let raw = self.tx_rx.1.load(atomic::Ordering::Acquire);
 
-            Some(tx)
+            // SAFETY: we asserted BindingBackendTx is usize-sized;
+            // the bool guard ensures this was previously set via set_tx.
+            Some(unsafe { mem::transmute::<usize, BindingBackendTx>(raw) })
         }
 
         #[inline(always)]
@@ -162,8 +161,8 @@ pub mod binding_backend {
             return None;
         }
 
-        // SAFETY: only one owner at this point
-        Some(unsafe { ptr::read(raw as *const T) })
+        // SAFETY: T is asserted to be usize-sized; value was stored via transmute
+        Some(unsafe { mem::transmute_copy::<usize, T>(&raw) })
     }
 
     impl BindingBackend for IpcBindingBackend {
@@ -200,12 +199,18 @@ pub mod binding_backend {
 mod binding_client {
     use std::{ffi::c_void, mem};
 
-    use v8::{External, FunctionTemplate};
+    use svld_language::{ThrowException, throw};
+    use tokio::sync::oneshot;
+    use v8::{External, FunctionTemplate, Global, PromiseResolver};
 
-    use crate::{bindings::backend::BindingClient, utils::OwnedStr, worker::WorkerState};
+    use crate::{
+        bindings::{BindingBackendMessage, backend::BindingClient},
+        utils::OwnedStr,
+        worker::WorkerState,
+    };
 
     pub struct IpcBindingClient {
-        functions: Vec<String>,
+        functions: Vec<OwnedStr>,
         binding_name: OwnedStr,
     }
 
@@ -214,7 +219,7 @@ mod binding_client {
         #[builder]
         pub fn new(functions: Vec<String>, binding_name: String) -> Self {
             Self {
-                functions,
+                functions: functions.into_iter().map(|name| name.into()).collect(),
                 binding_name: binding_name.into(),
             }
         }
@@ -223,6 +228,24 @@ mod binding_client {
         const unsafe fn get_static_binding_name(&self) -> &'static OwnedStr {
             unsafe { mem::transmute(&self.binding_name) }
         }
+
+        #[inline(always)]
+        const unsafe fn get_binding_name_void_ptr(&self) -> *mut c_void {
+            unsafe { self.get_static_binding_name() as *const OwnedStr as *mut c_void }
+        }
+
+        #[inline(always)]
+        unsafe fn get_static_function_name(&self, idx: usize) -> Option<&'static OwnedStr> {
+            self.functions
+                .get(idx)
+                .map(|item| unsafe { mem::transmute(item) })
+        }
+
+        #[inline(always)]
+        unsafe fn get_function_name_void_ptr(&self, idx: usize) -> Option<*mut c_void> {
+            unsafe { self.get_static_function_name(idx) }
+                .map(|item| item as *const OwnedStr as *mut c_void)
+        }
     }
 
     impl BindingClient for IpcBindingClient {
@@ -230,35 +253,121 @@ mod binding_client {
             &self,
             scope: &v8::PinScope<'s, '_>,
         ) -> Option<v8::Local<'s, v8::Value>> {
+            let binding_name_external_value =
+                External::new(scope, unsafe { self.get_binding_name_void_ptr() });
+
             let obj = v8::Object::new(scope);
 
-            for function in self.functions.iter() {
+            for (function_id, function) in self.functions.iter().enumerate() {
                 let fnk = FunctionTemplate::builder(
                     |scope: &mut v8::PinScope,
                      args: v8::FunctionCallbackArguments,
-                     _rv: v8::ReturnValue| {
-                        let name = unsafe {
-                            &*(args.data().cast::<v8::External>().value() as *const OwnedStr)
-                        }
-                        .as_str();
+                     mut rv: v8::ReturnValue| {
+                        let arr = args.data().cast::<v8::Array>();
+
+                        let binding_name_ptr = arr.get_index(scope, 0).unwrap().cast::<External>().value();
+                        let binding_name = unsafe { OwnedStr::from_void_ptr(binding_name_ptr) };
+
+                        let function_name_ptr = arr.get_index(scope, 1).unwrap().cast::<External>().value();
+                        let function_name = unsafe { OwnedStr::from_void_ptr(function_name_ptr) };
 
                         let state = WorkerState::get_from_isolate(scope);
-                        let tx = state.get_binding(name).unwrap();
+                        let tx = state.get_binding(binding_name).unwrap();
 
-                        println!("hello world {}", tx.is_closed());
-                        // tx.send();
+                        let args_len = args.length();
+                        let arr = v8::Array::new(scope, args_len);
+                        for idx in 0..args_len {
+                            arr.set_index(scope, idx as u32, args.get(idx));
+                        }
+
+                        if let Some(json_str) = v8::json::stringify(scope, arr.cast()) {
+                            let Ok(json) = serde_json::from_str::<ijson::IValue>(
+                                &json_str.to_rust_string_lossy(scope),
+                            ) else {
+                                return;
+                            };
+
+                            let (replier, recv) = oneshot::channel();
+
+                            let Ok(_) = tx.send(
+                                BindingBackendMessage::builder()
+                                    .args(json)
+                                    .function_name(function_name.to_string())
+                                    .replier(replier)
+                                    .worker(state.name.clone())
+                                    .build(),
+                            ) else {
+                                // channel closed
+                                return;
+                            };
+
+                            let Some(resolver) = PromiseResolver::new(scope) else {
+                                return;
+                            };
+
+                            let gresolver = Global::new(scope, resolver);
+                            rv.set(resolver.cast());
+
+                            state.clone().tasks.spawn_local(async move {
+                                let result = recv.await;
+                                state.schedule_resolution_and_tick(gresolver, {
+                                    match result {
+                                        Ok(data) => {
+                                            Ok(Box::new(move |scope| {
+                                                let error = data
+                                                    .as_object()
+                                                    .and_then(|item| item.get("error"))
+                                                    .and_then(|item| item.as_string())
+                                                    .map(|item| item.as_str());
+
+                                                if let Some(err) = error {
+                                                    throw(scope, ThrowException::error(err));
+                                                    None
+                                                } else {
+                                                    let ret = data
+                                                        .as_object()
+                                                        .and_then(|item| item.get("data"))
+                                                        .and_then(|item| serde_json::to_string(item).ok())
+                                                        .and_then(|item| v8::String::new(scope, &item))
+                                                        .map(|item| item.cast::<v8::Value>())
+                                                        .unwrap_or_else(|| v8::undefined(scope).cast());
+                                                    Some(ret)
+                                                }
+                                            }))
+                                        }
+
+                                        Err(_) => Err(ThrowException::error(
+                                            "failed to receive from binding; the binding server had closed",
+                                        )),
+                                    }
+                                });
+                            });
+                        }
                     },
                 )
-                .data(
-                    External::new(scope, unsafe {
-                        self.get_static_binding_name() as *const OwnedStr as *mut c_void
-                    })
-                    .cast(),
-                )
+                .data({
+                    let arr = v8::Array::new(scope, 2);
+
+                    arr.set_index(scope, 0, binding_name_external_value.cast());
+                    arr.set_index(
+                        scope,
+                        1,
+                        External::new(
+                            scope,
+                            unsafe { self.get_function_name_void_ptr(function_id).unwrap() }
+                        ).cast()
+                    );
+
+                    arr.cast()
+                })
                 .build(scope)
                 .get_function(scope)?;
 
-                obj.set(scope, v8::String::new(scope, function)?.cast(), fnk.cast());
+                obj.set(
+                    scope,
+                    v8::String::new(scope, function.as_str())?.cast(),
+                    fnk.cast(),
+                );
             }
 
             None
@@ -316,6 +425,7 @@ mod task {
 
         // type of the binding
         let binding_type = recv.read_parse_to_string().await?;
+        tracing::info!("got binding type {binding_type}");
 
         let functions_len = recv.read_u32_le().await?;
         let mut functions = Vec::with_capacity(functions_len as usize);
@@ -323,8 +433,13 @@ mod task {
             let function = recv.read_parse_to_string().await?;
             functions.push(function);
         }
+        tracing::info!("{binding_type} has registered {functions_len} functions");
 
-        binding_connections.set_connected(&binding_type)?;
+        if let Err(err) = binding_connections.set_connected(&binding_type) {
+            tracing::error!("failed to set to connected, reason: {err:?}");
+            return Err(err.into());
+        }
+        tracing::info!("{binding_type} has been set to connected");
 
         let backend = binding_connections.get_backend(&binding_type).unwrap();
 
@@ -386,14 +501,15 @@ mod task {
             match event {
                 Event::Internal(BindingBackendMessage {
                     worker,
-                    data,
+                    function_name,
+                    args,
                     replier,
                 }) => {
                     roll_id = roll_id.wrapping_add(1);
                     resolutions.insert(roll_id, replier);
                     send.send_message(Message {
                         id: roll_id,
-                        payload: ijson::ijson!({"worker": worker, "data": data}),
+                        payload: ijson::ijson!({"func": function_name, "args": args, "worker": worker}),
                     })
                     .await?;
                 }
@@ -524,7 +640,7 @@ mod task {
 
             for (idx, name) in binding_types.drain(..).enumerate() {
                 names.insert(name, idx);
-                *flags.get_mut(idx).unwrap() = AtomicBool::new(false);
+                flags.push(AtomicBool::new(false));
             }
 
             let flags = flags.into_boxed_slice();

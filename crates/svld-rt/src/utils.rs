@@ -1,3 +1,5 @@
+use std::ffi::c_void;
+
 /// An owned string which is ready to be turned into v8 external data.
 ///
 /// ```no_run
@@ -37,6 +39,11 @@ impl OwnedStr {
     pub const fn as_str(&self) -> &str {
         let slice = unsafe { core::slice::from_raw_parts(self.ptr, self.len) };
         unsafe { core::str::from_utf8_unchecked(slice) }
+    }
+
+    #[inline(always)]
+    pub const unsafe fn from_void_ptr(ptr: *mut c_void) -> &'static str {
+        unsafe { &*(ptr as *const Self) }.as_str()
     }
 }
 

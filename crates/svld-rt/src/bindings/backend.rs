@@ -6,8 +6,11 @@ pub struct BindingBackendMessage {
     /// The name of the worker, for identification purposes.
     pub worker: String,
 
+    /// The function to call.
+    pub function_name: String,
+
     /// The data.
-    pub data: ijson::IValue,
+    pub args: ijson::IValue,
 
     /// Replier.
     pub replier: oneshot::Sender<ijson::IValue>,
