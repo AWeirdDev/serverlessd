@@ -83,12 +83,13 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
             .body(payload.clone())
             .headers(mem::take(req.headers_mut()))
             .method(mem::take(req.method_mut()))
-            .url(
+            .url(format!(
+                "https://serverlessd.local{}",
                 req.uri()
                     .path_and_query()
                     .map(|path_and_query| path_and_query.to_string())
-                    .unwrap_or_else(|| String::new()),
-            )
+                    .unwrap_or_else(|| "/".to_string())
+            ))
             .build()
     };
 

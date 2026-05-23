@@ -202,6 +202,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
         state,
         module,
         promise,
+        env,
     } = init_worker_for_task(args).await?;
 
     let (_entrypoint, mut entrypoint_fetch) = {
@@ -380,12 +381,15 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     // arguments for the fetch()
                     let maybe_obj = worker_http_request_to_js_obj(try_catch, request);
                     let request_obj = unwrap_runtime(try_catch, maybe_obj)?;
+                    let env = Local::new(try_catch, &env);
 
                     // next: call
                     state.tick_monitor();
-                    let Some(result) =
-                        fetch_fn.call(try_catch, v8::undefined(try_catch).cast(), &[request_obj])
-                    else {
+                    let Some(result) = fetch_fn.call(
+                        try_catch,
+                        v8::undefined(try_catch).cast(),
+                        &[request_obj, env],
+                    ) else {
                         return Err(WorkerError::Timeout);
                     };
                     state.tick_monitor();
@@ -567,6 +571,7 @@ struct InitResult {
     state: Arc<WorkerState>,
     module: Global<Module>,
     promise: Global<Promise>,
+    env: Global<v8::Value>,
 }
 
 async fn init_worker_for_task(
@@ -611,7 +616,7 @@ async fn init_worker_for_task(
     state_handle.replace(state.clone());
 
     // environment initialization
-    let (module, promise) = {
+    let (module, promise, env) = {
         scope_with_context!(
             isolate: unsafe { state.get_isolate() },
             let &mut scope,
@@ -633,21 +638,6 @@ async fn init_worker_for_task(
                 unwrap_init(
                     try_catch,
                     intrinsics::extract_intrinsics(try_catch, context_global, intrinsics_obj),
-                )?;
-            }
-
-            // env
-            {
-                unwrap_init(
-                    try_catch,
-                    || -> Option<()> {
-                        context_global.set(
-                            try_catch,
-                            v8::String::new(try_catch, "env")?.cast(),
-                            create_js_env(try_catch, state.clone(), bindings)?,
-                        );
-                        Some(())
-                    }(),
                 )?;
             }
         }
@@ -697,9 +687,18 @@ async fn init_worker_for_task(
 
         let promise = promise.cast::<Promise>();
 
+        // env
+        let env = {
+            unwrap_init(
+                try_catch,
+                || -> Option<_> { create_js_env(try_catch, state.clone(), bindings) }(),
+            )?
+        };
+
         (
             Global::new(try_catch, module),
             Global::new(try_catch, promise),
+            Global::new(try_catch, env),
         )
     };
 
@@ -715,6 +714,7 @@ async fn init_worker_for_task(
         state,
         module,
         promise,
+        env,
     })
 }
 
