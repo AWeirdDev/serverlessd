@@ -20,7 +20,6 @@ pub(super) async fn serverless_task(
     mut rx: ServerlessRx,
     addr: SocketAddr,
     svl_handle: ServerlessHandle,
-    secret: String,
 ) {
     // now, we gotta start those threads
     // i know, this might be a bit not so memory efficient
@@ -39,7 +38,7 @@ pub(super) async fn serverless_task(
     let ctrl_c = tokio::signal::ctrl_c();
     tokio::pin!(ctrl_c);
 
-    let api_handle = std::pin::pin!(start_server(addr, svl_handle, secret));
+    let api_handle = std::pin::pin!(start_server(addr, svl_handle));
     tokio::pin!(api_handle);
 
     loop {

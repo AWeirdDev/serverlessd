@@ -1,5 +1,4 @@
 mod app;
-mod app_security;
 mod handle;
 mod task;
 mod trigger;
@@ -138,11 +137,6 @@ fn main() {
                 }
             };
 
-            let secret = dotenvy::var("SERVERLESSD_SECRET").unwrap_or_else(|_| {
-                eprintln!("=====> couldn't find env 'SERVERLESSD_SECRET', using blank bytes");
-                "0".repeat(32)
-            });
-
             rt.block_on(start_one(
                 source,
                 SocketAddr::new(
@@ -150,7 +144,6 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
-                secret,
             ));
             rt.shutdown_background();
         }
@@ -163,11 +156,6 @@ fn main() {
                 .build()
                 .expect("failed to create async runtime");
 
-            let Ok(secret) = dotenvy::var("SERVERLESSD_SECRET") else {
-                eprintln!("=====x error: couldn't find env 'SERVERLESSD_SECRET'");
-                return;
-            };
-
             rt.block_on(start(
                 args.pods,
                 args.workers_per_pod,
@@ -176,7 +164,6 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
-                secret,
             ));
             rt.shutdown_background();
         }
@@ -289,7 +276,7 @@ fn start_binding_backends() -> Arc<BindingStore> {
     Arc::new(store)
 }
 
-async fn start_one(source: String, addr: SocketAddr, secret: String) {
+async fn start_one(source: String, addr: SocketAddr) {
     let serverless = Serverless::builder()
         .n_workers(1)
         .n_pods(1)
@@ -305,7 +292,6 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
             rx,
             addr,
             ServerlessHandle::new(tx.clone()),
-            secret,
         ));
 
         (ServerlessHandle::new(tx), handle)
@@ -328,7 +314,7 @@ async fn start_one(source: String, addr: SocketAddr, secret: String) {
     }
 }
 
-async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr, secret: String) {
+async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr) {
     let serverless = Serverless::builder()
         .n_workers(n_workers)
         .n_pods(n_workers_per_pod)
@@ -342,7 +328,6 @@ async fn start(n_workers: usize, n_workers_per_pod: usize, addr: SocketAddr, sec
             rx,
             addr,
             ServerlessHandle::new(tx.clone()),
-            secret,
         ));
 
         (ServerlessHandle::new(tx), handle)

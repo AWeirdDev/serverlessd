@@ -14,7 +14,7 @@ use svld_rt::{
     serverless::CreateWorkerError,
 };
 
-use crate::{app_security::AuthMiddleware, handle::ServerlessHandle};
+use crate::handle::ServerlessHandle;
 
 #[derive(Template)]
 #[template(path = "404.html")]
@@ -33,18 +33,11 @@ struct AppState {
 pub(super) async fn start_server(
     addr: SocketAddr,
     serverless: ServerlessHandle,
-    secret: String,
 ) -> Result<(), Box<dyn core::error::Error + Send + Sync>> {
     let listener = TcpListener::new(addr).try_bind().await?;
 
     let router = Router::new()
         .hoop(affix_state::inject(Arc::new(AppState { serverless })))
-        .push(
-            Router::new()
-                .hoop(AuthMiddleware::new(secret))
-                .push(Router::with_path("/_/upload/{name}").post(api_upload_worker))
-                .push(Router::with_path("/_/remove/{name}").post(api_remove_worker)),
-        )
         .push(Router::with_path("/worker/{name}/{**rest}").get(worker))
         .push(Router::with_path("{**}").goal(wildcard));
 
@@ -202,50 +195,4 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
             );
         }
     }
-}
-
-#[handler]
-async fn api_upload_worker(req: &mut Request, res: &mut Response, depot: &Depot) {
-    let worker_name = req.param::<String>("name").unwrap();
-    let worker_bytes = match req.payload().await {
-        Ok(t) => t,
-        Err(err) => {
-            tracing::error!("failed to parse body, reason: {:?}", err);
-            res.render(errored("failed to parse body"));
-            return;
-        }
-    }
-    .clone(); // super cheap!
-
-    let state = depot.obtain::<Arc<AppState>>().unwrap();
-
-    let result = state
-        .serverless
-        .upload_worker(worker_name, worker_bytes)
-        .await;
-
-    if let Err(err) = result {
-        res.render(errored(err.to_string()));
-    } else {
-        res.render(Json(json!({"ok": true})));
-    }
-}
-
-#[handler]
-async fn api_remove_worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
-    let worker_name = req.param::<String>("name").unwrap();
-    let state = depot.obtain::<Arc<AppState>>().unwrap();
-
-    let res = state.serverless.remove_worker_code(worker_name).await;
-    if res.is_err() {
-        resp.render(Json(json!({"ok": true})));
-        return;
-    }
-
-    resp.render(Json(json!({"ok": true})));
-}
-
-#[inline(always)]
-fn errored<K: serde::Serialize>(s: K) -> Json<serde_json::Value> {
-    Json(json!({"ok": false, "error": s}))
 }

@@ -76,13 +76,6 @@ impl ServerlessHandle {
         Ok(())
     }
 
-    /// Remove worker code.
-    #[inline]
-    pub async fn remove_worker_code(&self, name: String) -> Result<(), ServerlessTriggerError> {
-        self.trigger(ServerlessTrigger::RemoveWorkerCode { name })
-            .await
-    }
-
     #[inline]
     pub async fn send_http_to_worker(
         &self,

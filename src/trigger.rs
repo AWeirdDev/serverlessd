@@ -7,6 +7,7 @@ use svld_rt::{
 };
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ServerlessTrigger {
     /// Creates a worker.
     CreateWorkerTask {
