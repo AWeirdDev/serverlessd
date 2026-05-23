@@ -1,0 +1,12 @@
+[package]
+name = "svld-ipc-client"
+description = "Implementation of the serverlessd bindings protocol with `serde` integration."
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+interprocess = { version = "2.4.2", features = ["tokio"] }
+serde = "1.0.228"
+serde_json = "1.0.150"
+thiserror = "2.0.18"
+tokio = { version = "1.52.3" }
