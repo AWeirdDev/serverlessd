@@ -8,6 +8,7 @@ use std::{
     io::{self, Write},
     net::{IpAddr, SocketAddr},
     path::PathBuf,
+    process::exit,
     str::FromStr,
     sync::Arc,
 };
@@ -20,6 +21,7 @@ use svld_rt::{
     models::WorkerConfig,
     serverless::Serverless,
 };
+use svld_wrangler_config::WranglerConfig;
 use tokio::sync::mpsc;
 
 use crate::{handle::ServerlessHandle, task::serverless_task};
@@ -60,8 +62,8 @@ enum Command {
 
 #[derive(clap::Args)]
 struct OneArgs {
-    /// The source file.
-    file: PathBuf,
+    /// The TOML configuration file (usually `wrangler.toml`)
+    config: PathBuf,
 
     /// The port to run. Defaults to 3000.
     #[arg(long, required = false)]
@@ -137,14 +139,17 @@ fn main() {
                 .build()
                 .expect("failed to create async runtime");
 
-            let source = match fs::read_to_string(&args.file) {
+            let config_file = read_file_to_string(&args.config);
+            let config = match svld_wrangler_config::from_str(&config_file) {
                 Ok(t) => t,
                 Err(e) => {
-                    eprintln!("=====x error: failed to open {:?}", &args.file);
+                    eprintln!("=====x error: failed to parse {:?}", &args.config);
                     eprintln!("       error: {}", &e.to_string());
                     return;
                 }
             };
+
+            let source = read_file_to_string(&args.config);
 
             rt.block_on(start_one(
                 source,
@@ -153,7 +158,7 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
-                args.bindings.unwrap_or_default(),
+                config,
             ));
             rt.shutdown_background();
         }
@@ -273,7 +278,8 @@ fn start_binding_backends(binding_types: Vec<String>) -> Arc<BindingStore> {
     Arc::new(store)
 }
 
-async fn start_one(source: String, addr: SocketAddr, binding_types: Vec<String>) {
+async fn start_one(source: String, addr: SocketAddr, config: WranglerConfig) {
+    let binding_types = config.get_binding_types();
     let serverless = Serverless::builder()
         .n_workers(1)
         .n_pods(1)
@@ -343,5 +349,16 @@ async fn start(
 
     if let Err(e) = handle.await {
         tracing::error!(?e, "error while joining task handle");
+    }
+}
+
+fn read_file_to_string(path: &PathBuf) -> String {
+    match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("=====x error: failed to open {:?}", path);
+            eprintln!("       error: {}", &e.to_string());
+            exit(-1);
+        }
     }
 }

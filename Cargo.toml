@@ -21,6 +21,7 @@ bytes = "1.11.1"
 
 # custom deps
 svld-rt = { path = "./crates/svld-rt" }
+svld-wrangler-config = { path = "./crates/svld-wrangler-config" }
 
 [dev-dependencies]
 # pnet = "0.35.0"
@@ -30,6 +31,8 @@ members = [
     "crates/svld-language",
     "crates/svld-rt",
     "crates/svld-ipc-client",
+
+    "crates/svld-wrangler-config",
 
     # binaries
     "crates/svld-binding-kv",
