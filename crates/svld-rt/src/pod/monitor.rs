@@ -1,7 +1,7 @@
 use std::{sync::Arc, thread, time::Duration};
 
 use tokio::{
-    sync::{Notify, mpsc, oneshot},
+    sync::{mpsc, oneshot},
     task::LocalSet,
     time,
 };
@@ -14,7 +14,6 @@ use crate::triggers::{WorkerTrigger, WorkerTx};
 enum MonitorTrigger {
     Spawn {
         isolate_handle: IsolateHandle,
-        worker_id: usize,
         worker_tx: WorkerTx,
         reply: oneshot::Sender<MonitorHandle>,
     },
@@ -61,23 +60,17 @@ impl PodAsideMonitor {
     /// # Safety
     /// Worker of ID `worker_id` must exist.
     #[must_use]
-    fn spawn(
-        &mut self,
-        isolate_handle: IsolateHandle,
-        worker_id: usize,
-        worker_tx: WorkerTx,
-    ) -> MonitorHandle {
-        let notify = Arc::new(Notify::new());
+    fn spawn(&mut self, isolate_handle: IsolateHandle, worker_tx: WorkerTx) -> MonitorHandle {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let notify = Arc::new(tx);
         let cancel = CancellationToken::new();
 
         let mw = MonitoredWorker::builder()
             .isolate(isolate_handle)
-            .worker_id(worker_id)
             .worker_tx(worker_tx)
-            .notify(notify.clone())
             .cancel(cancel.clone())
             .build();
-        self.tracker.spawn_local(monitor_worker_task(mw));
+        self.tracker.spawn_local(monitor_worker_task(mw, rx));
 
         MonitorHandle { notify, cancel }
     }
@@ -100,7 +93,6 @@ impl PodAsideMonitorHandle {
     pub async fn start_monitoring(
         &self,
         isolate_handle: IsolateHandle,
-        worker_id: usize,
         worker_tx: WorkerTx,
     ) -> Option<MonitorHandle> {
         let (reply, recv) = oneshot::channel();
@@ -108,7 +100,6 @@ impl PodAsideMonitorHandle {
             .send(MonitorTrigger::Spawn {
                 isolate_handle,
                 reply,
-                worker_id,
                 worker_tx,
             })
             .ok()?;
@@ -120,9 +111,7 @@ impl PodAsideMonitorHandle {
 #[derive(Debug, bon::Builder)]
 struct MonitoredWorker {
     isolate: IsolateHandle,
-    worker_id: usize,
     worker_tx: WorkerTx,
-    notify: Arc<Notify>,
     cancel: CancellationToken,
 }
 
@@ -132,10 +121,9 @@ async fn monitor_task(mut monitor: PodAsideMonitor, mut rx: MonitorRx) {
             MonitorTrigger::Spawn {
                 isolate_handle,
                 reply,
-                worker_id,
                 worker_tx,
             } => {
-                let handle = monitor.spawn(isolate_handle, worker_id, worker_tx);
+                let handle = monitor.spawn(isolate_handle, worker_tx);
                 reply.send(handle).ok();
             }
         }
@@ -143,7 +131,7 @@ async fn monitor_task(mut monitor: PodAsideMonitor, mut rx: MonitorRx) {
 }
 
 pub struct MonitorHandle {
-    notify: Arc<Notify>,
+    notify: Arc<mpsc::UnboundedSender<()>>,
     cancel: CancellationToken,
 }
 
@@ -164,7 +152,7 @@ impl MonitorHandle {
     /// ```
     #[inline(always)]
     pub fn tick(&self) {
-        self.notify.notify_one();
+        let _ = self.notify.send(());
     }
 
     /// Stops the monitoring.
@@ -177,33 +165,34 @@ impl MonitorHandle {
     }
 }
 
-async fn monitor_worker_task(mw: MonitoredWorker) {
-    tracing::info!("monitoring worker {}", mw.worker_id);
-
+// Monitor — now notifications are never lost:
+async fn monitor_worker_task(mw: MonitoredWorker, mut rx: mpsc::UnboundedReceiver<()>) {
     let mut elapsed = Duration::default();
 
     let walltime_tick = time::sleep(Duration::from_secs(10));
     tokio::pin!(walltime_tick);
 
-    let deadline = time::sleep(Duration::from_millis(10));
+    let deadline = time::sleep(Duration::MAX);
     tokio::pin!(deadline);
-
-    let cancel = mw.cancel;
 
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => {
+            _ = mw.cancel.cancelled() => {
+                tracing::warn!("monitor: cancelled");
                 break;
             }
             _ = &mut walltime_tick => {
+                tracing::warn!("monitor: walltime");
                 break;
             }
-            msg = mw.notify.notified() => msg,
+            _ = rx.recv() => {}
         };
 
         let remaining = Duration::from_millis(10).saturating_sub(elapsed);
+        tracing::info!("remaining time: {remaining:?}");
         if remaining.is_zero() {
+            tracing::warn!("monitor: no time remaining");
             break;
         }
 
@@ -214,16 +203,23 @@ async fn monitor_worker_task(mw: MonitoredWorker) {
         tokio::select! {
             biased;
             _ = &mut walltime_tick => {
+                tracing::warn!("monitor: walltime");
                 break;
+            }
+            _ = rx.recv() => {
+                deadline.as_mut().reset(
+                    time::Instant::now() + Duration::from_secs(86400 * 365 * 30)
+                );
             }
             _ = &mut deadline => {
+                tracing::warn!("monitor: deadline reached");
                 break;
             }
-            msg = mw.notify.notified() => msg,
         };
 
         elapsed += start.elapsed();
         if elapsed >= Duration::from_millis(10) {
+            tracing::warn!("monitor: takes more than 10ms between ticks");
             break;
         }
     }

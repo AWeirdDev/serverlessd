@@ -154,6 +154,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
                             .await?;
                     }
                 };
+                tracing::info!("actually removed");
             }
 
             KvPayload::Put { key, value } => {

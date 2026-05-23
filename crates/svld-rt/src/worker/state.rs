@@ -46,9 +46,6 @@ pub struct CreateWorkerStateArgs {
     /// The isolate pointer.
     pub isolate: NonNull<OwnedIsolate>,
 
-    /// The ID of the worker.
-    pub worker_id: usize,
-
     /// The name of the worker task.
     pub worker_name: String,
 
@@ -72,7 +69,6 @@ impl WorkerState {
         CreateWorkerStateArgs {
             platform,
             isolate,
-            worker_id,
             worker_tx,
             monitor_handle,
             worker_name,
@@ -89,7 +85,7 @@ impl WorkerState {
             isolate,
             platform,
             monitor: monitor_handle
-                .start_monitoring(isolate_handle, worker_id, worker_tx)
+                .start_monitoring(isolate_handle, worker_tx)
                 .await?,
             blocks: {
                 Blocks::new()

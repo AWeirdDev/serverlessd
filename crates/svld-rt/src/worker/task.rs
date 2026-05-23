@@ -104,7 +104,6 @@ pub(super) async fn create_cancel_safe_task(
                 let result = create_task(
                     &mut rx,
                     InitWorkerArgs::builder()
-                        .worker_id(id)
                         .isolate(isolate_ptr)
                         .task(task)
                         .tx(tx.clone())
@@ -181,7 +180,6 @@ fn drop_isolate(isolate_ptr: NonNull<OwnedIsolate>) {
 
 #[derive(Builder)]
 struct InitWorkerArgs<'a> {
-    worker_id: usize,
     isolate: NonNull<OwnedIsolate>,
     task: WorkerTask,
     tx: WorkerTx,
@@ -389,6 +387,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                         v8::undefined(try_catch).cast(),
                         &[request_obj, env],
                     ) else {
+                        tracing::error!("WHAT THE ACTUAL FUCK IS GOING ON?????");
                         return Err(WorkerError::Timeout);
                     };
                     state.tick_monitor();
@@ -575,7 +574,6 @@ struct InitResult {
 
 async fn init_worker_for_task(
     InitWorkerArgs {
-        worker_id,
         isolate,
         task,
         tx,
@@ -595,7 +593,6 @@ async fn init_worker_for_task(
         CreateWorkerStateArgs::builder()
             .isolate(isolate)
             .monitor_handle(monitor_handle)
-            .worker_id(worker_id)
             .worker_tx(tx)
             .worker_name(name)
             .platform(platform)

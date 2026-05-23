@@ -1,8 +1,8 @@
 export default {
   async fetch(_request, env) {
-    await env.KV.put("hello", "world");
-    let hello = await env.KV.get("hello");
-    return new Response(JSON.stringify(hello), {
+    await fetch("https://google.com");
+
+    return new Response(JSON.stringify("yes"), {
       status: 200,
     });
   },

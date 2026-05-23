@@ -80,8 +80,12 @@ impl Block for ReplierBlock {
             if unsafe { &*replier.as_ptr() }.is_some() {
                 let item = unsafe { &mut *replier.as_ptr() };
                 if let Some(item) = item.take() {
-                    // if there's nothing, we send blank data
-                    item.send(Err(WorkerError::Timeout)).ok();
+                    item.send(Ok(WorkerHttpResponse {
+                        status: http::StatusCode::OK,
+                        headers: http::HeaderMap::new(),
+                        body: bytes::Bytes::new(),
+                    }))
+                    .ok();
                 }
             }
         }
