@@ -8,6 +8,9 @@ use tokio_util::task::TaskTracker;
 use crate::bindings::{BindingBackend, BindingBackendTx, backend::BindingClient};
 
 /// A store containing active bindings.
+///
+/// Note that this store only contains the **type** of the bindings,
+/// not the **name** of them. See the module documentation for more.
 #[derive(Default)]
 pub struct BindingStore {
     /// The bindings (`{ binding_type: binding_item }`).
@@ -76,6 +79,8 @@ impl BindingStore {
     }
 
     /// Lists all bindings.
+    ///
+    /// Returns an iterator over `(binding_type, binding_item)`.
     #[inline(always)]
     pub fn list(&self) -> hash_map::Iter<'_, String, BindingItem> {
         self.bindings.iter()
