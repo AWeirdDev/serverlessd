@@ -59,6 +59,8 @@ impl BindingClient<Uninitialized> {
 
         self.send.write_all(&buf).await?;
 
+        tracing::info!("handshake suceeded! connection established");
+
         // SAFETY: they are the same in-memory layout
         unsafe { mem::transmute(self) }
     }

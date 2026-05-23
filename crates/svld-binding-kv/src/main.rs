@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
             _ = &mut ctrl_c => {
                 break;
             }
-            msg = client.recv_message::<[ijson::IValue; 1]>() => msg
+            msg = client.recv_message::<Vec<ijson::IValue>>() => msg
         };
 
         let ServerMessage {
