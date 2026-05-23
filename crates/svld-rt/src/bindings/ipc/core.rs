@@ -73,7 +73,7 @@ pub mod binding_backend {
     use crate::bindings::{BindingBackend, BindingBackendTx, backend::BindingClient};
 
     pub struct IpcBindingBackend {
-        tx_rx: (
+        maybe_tx: (
             AtomicBool,  // has data?
             AtomicUsize, // BindingBackendTx
         ),
@@ -90,14 +90,14 @@ pub mod binding_backend {
         #[inline(always)]
         pub const fn new(functions: Vec<String>) -> Self {
             Self {
-                tx_rx: (AtomicBool::new(false), AtomicUsize::new(0)),
+                maybe_tx: (AtomicBool::new(false), AtomicUsize::new(0)),
                 functions,
             }
         }
 
         #[inline(always)]
         pub fn is_occupied(&self) -> bool {
-            self.tx_rx.0.load(atomic::Ordering::Acquire)
+            self.maybe_tx.0.load(atomic::Ordering::Acquire)
         }
 
         pub fn set_tx(&self, tx: BindingBackendTx) -> Result<(), IpcBindingBackendError> {
@@ -106,7 +106,7 @@ pub mod binding_backend {
             }
 
             if self
-                .tx_rx
+                .maybe_tx
                 .0
                 .compare_exchange_weak(
                     false,
@@ -120,7 +120,7 @@ pub mod binding_backend {
             }
 
             // SAFETY: asserted BindingBackendTx/Rx to be usize-sized
-            self.tx_rx
+            self.maybe_tx
                 .1
                 .store(unsafe { mem::transmute(tx) }, atomic::Ordering::Release);
 
@@ -129,14 +129,14 @@ pub mod binding_backend {
 
         /// Gets the transmitter.
         pub fn get_atomic_tx(&self) -> Option<BindingBackendTx> {
-            if !self.tx_rx.0.load(atomic::Ordering::Acquire) {
+            if !self.maybe_tx.0.load(atomic::Ordering::Acquire) {
                 return None;
             }
 
             // SAFETY: it's impossible to set back to `None`.
             // once it's set, it cannot be altered. so race conditions
             // do not apply here.
-            let raw = self.tx_rx.1.load(atomic::Ordering::Acquire);
+            let raw = self.maybe_tx.1.load(atomic::Ordering::Acquire);
 
             // SAFETY: we asserted BindingBackendTx is usize-sized;
             // the bool guard ensures this was previously set via set_tx.
@@ -146,7 +146,12 @@ pub mod binding_backend {
         #[inline(always)]
         #[must_use]
         pub fn take_atomic_tx(&self) -> Option<BindingBackendTx> {
-            takeaway(&self.tx_rx.0, &self.tx_rx.1)
+            takeaway(&self.maybe_tx.0, &self.maybe_tx.1)
+        }
+
+        #[inline]
+        pub fn deoccupy(&self) {
+            self.maybe_tx.0.store(false, atomic::Ordering::Release);
         }
     }
 
@@ -450,10 +455,13 @@ mod task {
                     &binding_type,
                     err
                 );
-
-                // remember to remove the tx (gotta take it out)
-                let _ = backend.take_atomic_tx();
             }
+
+            // remember to remove the tx (gotta take it out)
+            let _ = backend.take_atomic_tx();
+            backend.deoccupy();
+
+            let _ = binding_connections.set_disconnected(&binding_type);
         });
 
         Ok(())
@@ -491,7 +499,7 @@ mod task {
                     match msg {
                         Ok(t) => Event::External(t),
                         Err(e) => {
-                            tracing::error!("failed to read & parse client message, breaking: {e:?}");
+                            tracing::error!("failed to read & parse binding sclient message, breaking: {e:?}");
                             break;
                         }
                     }
@@ -672,6 +680,17 @@ mod task {
                     Ok(_) => Ok(()),
                     Err(_) => Err(ExpectBindingError::BindingAlreadyConnected),
                 }
+            } else {
+                Err(ExpectBindingError::BindingNotFound)
+            }
+        }
+
+        /// Sets a binding to disconnected.
+        fn set_disconnected(&self, name: &str) -> Result<(), ExpectBindingError> {
+            if let Some(&idx) = self.names.get(name) {
+                let atom = self.flags.get(idx).unwrap();
+                atom.store(false, atomic::Ordering::Release);
+                Ok(())
             } else {
                 Err(ExpectBindingError::BindingNotFound)
             }
