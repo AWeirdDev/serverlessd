@@ -274,6 +274,7 @@ impl JsResponse {
     }
 }
 
+#[must_use]
 #[repr(transparent)]
 pub struct ResponseBuilder<'s> {
     this: Local<'s, v8::Object>,
@@ -282,14 +283,12 @@ pub struct ResponseBuilder<'s> {
 #[allow(unused)]
 impl<'s> ResponseBuilder<'s> {
     #[inline]
-    #[must_use]
     pub fn new(scope: &v8::PinScope<'s, '_>) -> Self {
         Self {
             this: v8::Object::new(scope),
         }
     }
 
-    #[must_use]
     pub fn status(self, scope: &v8::PinScope<'s, '_>, code: u16) -> Option<Self> {
         let code_k = v8::String::new(scope, "status")?;
         self.this.set(
@@ -300,7 +299,6 @@ impl<'s> ResponseBuilder<'s> {
         Some(self)
     }
 
-    #[must_use]
     pub fn status_text<K: AsRef<str>>(self, scope: &v8::PinScope<'s, '_>, text: K) -> Option<Self> {
         let k = v8::String::new(scope, "statusText")?;
         let v = v8::String::new(scope, text.as_ref())?;
@@ -308,7 +306,6 @@ impl<'s> ResponseBuilder<'s> {
         Some(self)
     }
 
-    #[must_use]
     pub fn url<K: AsRef<str>>(self, scope: &v8::PinScope<'s, '_>, url: K) -> Option<Self> {
         let url_k = v8::String::new(scope, "url")?;
         let url = v8::String::new(scope, url.as_ref())?;
@@ -316,7 +313,6 @@ impl<'s> ResponseBuilder<'s> {
         Some(self)
     }
 
-    #[must_use]
     pub fn type_<K: AsRef<str>>(self, scope: &v8::PinScope<'s, '_>, name: K) -> Option<Self> {
         let type_k = v8::String::new(scope, "type")?;
         let val = v8::String::new(scope, name.as_ref())?;
@@ -324,7 +320,6 @@ impl<'s> ResponseBuilder<'s> {
         Some(self)
     }
 
-    #[must_use]
     pub fn redirected(self, scope: &v8::PinScope<'s, '_>, redirected: bool) -> Option<Self> {
         let redir_k = v8::String::new(scope, "redirected")?;
         self.this.set(
@@ -335,7 +330,6 @@ impl<'s> ResponseBuilder<'s> {
         Some(self)
     }
 
-    #[must_use]
     pub fn headers(
         self,
         scope: &v8::PinScope<'s, '_>,
@@ -406,7 +400,6 @@ impl<'s> ResponseBuilder<'s> {
         self.body(scope, uint8.cast())
     }
 
-    #[must_use]
     pub fn build(self, scope: &mut v8::PinScope<'s, '_>) -> Option<Local<'s, v8::Object>> {
         // .ok — boolean derived from status
         {

@@ -18,8 +18,8 @@ use crate::{
     bindings::BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
     env::create_js_env,
-    intrinsics::{self, JsResponse},
-    models::{WorkerConfig, WorkerHttpResponse},
+    intrinsics::{self, JsRequest, JsResponse},
+    models::{WorkerConfig, WorkerHttpRequest, WorkerHttpResponse},
 };
 use svld_language::{
     ExceptionDetails, ExceptionDetailsExt, Promised, ThrowException, get_bytes, throw,
@@ -359,8 +359,6 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
             }
 
             WorkerTrigger::Http { reply, request } => {
-                tracing::info!("worker received http, request: {:?}", request);
-
                 if let Some(gfetch) = entrypoint_fetch.take() {
                     let isolate = unsafe { state.get_isolate() };
                     scope_with_context!(
@@ -370,7 +368,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                     );
                     try_catch!(scope: scope, let try_catch);
 
-                    let fetch = Local::new(try_catch, gfetch);
+                    let fetch_fn = Local::new(try_catch, gfetch);
 
                     let replier_handle = Box::new(Some(reply));
                     let replier_ptr = Box::into_raw(replier_handle);
@@ -379,9 +377,14 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
                         shell.set_replier(replier_ptr);
                     });
 
+                    // arguments for the fetch()
+                    let maybe_obj = worker_http_request_to_js_obj(try_catch, request);
+                    let request_obj = unwrap_runtime(try_catch, maybe_obj)?;
+
                     // next: call
                     state.tick_monitor();
-                    let Some(result) = fetch.call(try_catch, v8::undefined(try_catch).cast(), &[])
+                    let Some(result) =
+                        fetch_fn.call(try_catch, v8::undefined(try_catch).cast(), &[request_obj])
                     else {
                         return Err(WorkerError::Timeout);
                     };
@@ -781,3 +784,34 @@ macro_rules! _simple_unwrap_impl {
 _simple_unwrap_impl!(unwrap_compilation, WorkerError::CompileError);
 _simple_unwrap_impl!(unwrap_init, WorkerError::ModuleInitError);
 _simple_unwrap_impl!(unwrap_runtime, WorkerError::RuntimeError);
+
+fn worker_http_request_to_js_obj<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    WorkerHttpRequest {
+        body,
+        mut headers,
+        method,
+        url,
+    }: WorkerHttpRequest,
+) -> Option<v8::Local<'s, v8::Value>> {
+    JsRequest::builder(scope, &url)?
+        .body_bytes(scope, &body)?
+        .method(scope, method)?
+        .headers(scope, {
+            let jsh = v8::Object::new(scope);
+
+            for (maybe_key, value) in headers.drain() {
+                if let Some(key) = maybe_key {
+                    jsh.set(
+                        scope,
+                        v8::String::new(scope, key.as_str())?.cast(),
+                        v8::String::new(scope, value.to_str().unwrap_or(""))?.cast(),
+                    );
+                }
+            }
+
+            jsh
+        })?
+        .build(scope)
+        .map(|item| item.cast())
+}
