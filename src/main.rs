@@ -73,7 +73,7 @@ struct OneArgs {
 
     /// The types of bindings to use.
     #[arg(long)]
-    bindings: Vec<String>,
+    bindings: Option<Vec<String>>,
 }
 
 #[derive(clap::Args)]
@@ -99,7 +99,7 @@ struct RunArgs {
 
     /// The types of bindings to use.
     #[arg(long)]
-    bindings: Vec<String>,
+    bindings: Option<Vec<String>>,
 }
 
 #[derive(clap::Args)]
@@ -153,7 +153,7 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
-                args.bindings,
+                args.bindings.unwrap_or_default(),
             ));
             rt.shutdown_background();
         }
@@ -174,7 +174,7 @@ fn main() {
                         .expect("failed to parse ip addr"),
                     args.port.unwrap_or(3000),
                 ),
-                args.bindings,
+                args.bindings.unwrap_or_default(),
             ));
             rt.shutdown_background();
         }
