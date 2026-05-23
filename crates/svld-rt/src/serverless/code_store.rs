@@ -5,6 +5,8 @@ use once_cell::sync::OnceCell;
 use regex::Regex;
 use tokio::io;
 
+use crate::models::WorkerConfig;
+
 static VALIDATE_REGEX: OnceCell<Regex> = OnceCell::new();
 
 fn get_validate_regex() -> &'static Regex {
@@ -18,9 +20,7 @@ fn get_validate_regex() -> &'static Regex {
             )
             .ok();
 
-        // this is probably going to be used many times;
-        // we'll use unwrap_unchecked() here
-        unsafe { VALIDATE_REGEX.get().unwrap_unchecked() }
+        VALIDATE_REGEX.get().unwrap()
     }
 }
 
@@ -29,8 +29,11 @@ pub enum CodeStoreError {
     #[error("invalid worker name {0:?}")]
     InvalidName(String),
 
-    #[error("io error {0:#?}")]
-    IoError(io::Error),
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+
+    #[error(transparent)]
+    SerializationError(#[from] serde_json::Error),
 }
 
 /// Worker code store, using the filesystem.
@@ -78,32 +81,59 @@ impl CodeStore {
     }
 
     #[inline(always)]
-    pub async fn upload_worker_code(
+    pub async fn upload_worker(
         &self,
-        name: String,
         code: Bytes,
+        config: WorkerConfig,
     ) -> Result<(), CodeStoreError> {
-        if !get_validate_regex().is_match(&name) {
-            return Err(CodeStoreError::InvalidName(name));
+        let name = &config.name;
+        if !get_validate_regex().is_match(name) {
+            return Err(CodeStoreError::InvalidName(name.clone()));
         }
 
-        let path = self.check_fs().join(format!("{}.js", &name));
-        tokio::fs::write(&path, code)
-            .await
-            .map_err(|err| CodeStoreError::IoError(err))?;
+        let base = self.check_fs();
+        let js_path = base.join(format!("{}.js", &name));
+        let config_path = base.join(format!("{}.cfg", &name));
+
+        tokio::fs::write(&js_path, code).await?;
+        tokio::fs::write(&config_path, serde_json::to_vec(&config)?).await?;
 
         Ok(())
     }
 
     #[inline(always)]
-    pub async fn remove_worker_code(&self, name: &str) {
+    pub async fn remove_worker(&self, name: &str) {
         let path = self.check_fs().join(format!("{}.js", &name));
         fs::remove_file(path).ok();
     }
 
     #[inline(always)]
-    pub async fn get_worker_code(&self, name: &str) -> Option<String> {
-        let path = self.check_fs().join(format!("{}.js", &name));
-        tokio::fs::read_to_string(path).await.ok()
+    pub async fn get_worker(&self, name: &str) -> Option<WorkerOnDisk> {
+        let base = self.check_fs();
+        let maybe_worker_code = {
+            let path = base.join(format!("{}.js", &name));
+            tokio::fs::read_to_string(path).await
+        }
+        .ok();
+        let maybe_worker_config = {
+            let path = base.join(format!("{}.cfg", &name));
+            tokio::fs::read(path).await
+        }
+        .ok()
+        .and_then(|v| match serde_json::from_slice(&v) {
+            Ok(t) => Some(t),
+            Err(err) => {
+                tracing::error!("error when reading config: {err:?}");
+                None
+            }
+        });
+
+        maybe_worker_code
+            .and_then(|code| maybe_worker_config.map(|config| WorkerOnDisk { code, config }))
     }
+}
+
+pub struct WorkerOnDisk {
+    pub code: String,
+    pub config: WorkerConfig,
 }

@@ -19,7 +19,7 @@ use crate::{
     blocks::{MaybeReplier, ReplierBlock},
     env::create_js_env,
     intrinsics::{self, JsResponse},
-    models::WorkerHttpResponse,
+    models::{WorkerConfig, WorkerHttpResponse},
 };
 use svld_language::{
     ExceptionDetails, ExceptionDetailsExt, Promised, ThrowException, get_bytes, throw,
@@ -50,11 +50,11 @@ use crate::{
 /// ```
 #[derive(Debug)]
 pub struct WorkerTask {
-    /// The name of the worker script.
-    pub name: String,
-
     /// The worker script source.
     pub source: String,
+
+    /// The worker configuration.
+    pub config: WorkerConfig,
 }
 
 #[derive(Builder)]
@@ -579,7 +579,10 @@ async fn init_worker_for_task(
         binding_store,
     }: InitWorkerArgs<'_>,
 ) -> Result<InitResult, WorkerError> {
-    let WorkerTask { source, name } = task;
+    let WorkerTask {
+        source,
+        config: WorkerConfig { name, bindings },
+    } = task;
 
     let Some(state) = WorkerState::create_injected(
         CreateWorkerStateArgs::builder()
@@ -638,7 +641,7 @@ async fn init_worker_for_task(
                         context_global.set(
                             try_catch,
                             v8::String::new(try_catch, "env")?.cast(),
-                            create_js_env(try_catch, state.clone())?,
+                            create_js_env(try_catch, state.clone(), bindings)?,
                         );
                         Some(())
                     }(),

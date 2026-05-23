@@ -78,6 +78,11 @@ impl BindingStore {
         self.bindings.get(type_).map(|item| item.get_tx())
     }
 
+    #[inline(always)]
+    pub fn get_binding(&self, type_: &str) -> Option<&BindingItem> {
+        self.bindings.get(type_)
+    }
+
     /// Lists all bindings.
     ///
     /// Returns an iterator over `(binding_type, binding_item)`.

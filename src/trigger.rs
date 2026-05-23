@@ -2,6 +2,7 @@ use bytes::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
 use svld_rt::{
+    models::WorkerConfig,
     serverless::{CodeStoreError, CreateWorkerError},
     triggers::PodTrigger,
 };
@@ -15,10 +16,10 @@ pub enum ServerlessTrigger {
         reply: oneshot::Sender<Result<(usize, usize), CreateWorkerError>>,
     },
 
-    /// Uploads worker code.
-    UploadWorkerCode {
-        name: String,
+    /// Uploads worker code and config.
+    UploadWorker {
         code: Bytes,
+        config: WorkerConfig,
         reply: oneshot::Sender<Result<(), CodeStoreError>>,
     },
 

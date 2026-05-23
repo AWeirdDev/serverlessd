@@ -7,6 +7,7 @@ use v8::{Platform, SharedRef};
 
 use crate::{
     bindings::BindingStore,
+    models::WorkerConfig,
     pod::PodHandle,
     serverless::{
         code_store::{CodeStore, CodeStoreError},
@@ -130,16 +131,16 @@ impl Serverless {
     }
 
     #[inline(always)]
-    pub async fn upload_worker_code(
+    pub async fn upload_worker(
         &mut self,
-        name: String,
         code: Bytes,
+        config: WorkerConfig,
     ) -> Result<(), CodeStoreError> {
-        self.code_store.upload_worker_code(name, code).await
+        self.code_store.upload_worker(code, config).await
     }
 
     #[inline(always)]
     pub async fn remove_worker_code(&mut self, name: &str) {
-        self.code_store.remove_worker_code(name).await;
+        self.code_store.remove_worker(name).await;
     }
 }

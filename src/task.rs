@@ -62,7 +62,7 @@ pub(super) async fn serverless_task(
                     Some(trigger) => {
                         match trigger {
                             ServerlessTrigger::CreateWorkerTask { name, reply } => {
-                                let source = match serverless.code_store.get_worker_code(&name).await {
+                                let worker_on_disk = match serverless.code_store.get_worker(&name).await {
                                     Some(t) => t,
                                     None => {
                                         reply.send(Err(CreateWorkerError::UnknownWorker(name))).ok();
@@ -86,8 +86,8 @@ pub(super) async fn serverless_task(
                                     pod_handle.assign_worker_task(
                                         pod_worker_id,
                                         WorkerTask {
-                                            source,
-                                            name
+                                            source: worker_on_disk.code,
+                                            config: worker_on_disk.config
                                         }
                                     )
                                     .await;
@@ -108,8 +108,8 @@ pub(super) async fn serverless_task(
                                 }
                             }
 
-                            ServerlessTrigger::UploadWorkerCode { name, code, reply } => {
-                                reply.send(serverless.upload_worker_code(name, code).await).ok();
+                            ServerlessTrigger::UploadWorker { code, config, reply } => {
+                                reply.send(serverless.upload_worker(code, config).await).ok();
                             }
 
                             ServerlessTrigger::RemoveWorkerCode { name } => {

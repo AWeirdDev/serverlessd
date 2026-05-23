@@ -3,7 +3,7 @@ use tokio::sync::oneshot;
 
 use svld_rt::{
     blocks::Reply,
-    models::WorkerHttpRequest,
+    models::{WorkerConfig, WorkerHttpRequest},
     serverless::{CodeStoreError, CreateWorkerError},
     triggers::{PodTrigger, WorkerTrigger},
 };
@@ -66,10 +66,18 @@ impl ServerlessHandle {
 
     /// Upload worker code.
     #[inline]
-    pub async fn upload_worker(&self, name: String, code: Bytes) -> Result<(), UploadWorkerError> {
+    pub async fn upload_worker(
+        &self,
+        code: Bytes,
+        config: WorkerConfig,
+    ) -> Result<(), UploadWorkerError> {
         let (reply, recv) = oneshot::channel();
-        self.trigger(ServerlessTrigger::UploadWorkerCode { name, code, reply })
-            .await?;
+        self.trigger(ServerlessTrigger::UploadWorker {
+            code,
+            config,
+            reply,
+        })
+        .await?;
 
         recv.await
             .map_err(|_| UploadWorkerError::Trigger(ServerlessTriggerError::ChannelClosed))??;

@@ -17,6 +17,7 @@ use bytes::Bytes;
 use clap::Parser;
 use svld_rt::{
     bindings::{BindingStore, ipc},
+    models::WorkerConfig,
     serverless::Serverless,
 };
 use tokio::sync::mpsc;
@@ -282,7 +283,13 @@ async fn start_one(source: String, addr: SocketAddr) {
     };
 
     let res = svl
-        .upload_worker("one".to_string(), Bytes::from_owner(source))
+        .upload_worker(
+            Bytes::from_owner(source),
+            WorkerConfig::builder()
+                .bindings(vec![])
+                .name("one".to_string())
+                .build(),
+        )
         .await;
     if res.is_err() {
         tracing::error!("failed to upload one worker, reason: {res:?}");

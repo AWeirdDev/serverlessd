@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use http::{HeaderMap, Method, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// An HTTP response from the worker.
 #[derive(bon::Builder, Debug)]
@@ -24,12 +24,13 @@ pub struct WorkerHttpRequest {
     pub body: Bytes,
 }
 
-#[derive(bon::Builder, Debug, Deserialize)]
+#[derive(bon::Builder, Debug, Serialize, Deserialize)]
 pub struct WorkerConfig {
+    pub name: String,
     pub bindings: Vec<BindingConfig>,
 }
 
-#[derive(bon::Builder, Debug, Deserialize)]
+#[derive(bon::Builder, Debug, Serialize, Deserialize)]
 pub struct BindingConfig {
     /// The name of the binding. For example: `MY_BINDING`.
     pub name: String,
