@@ -42,8 +42,8 @@ jobs:
 
             - name: Build
               run: |
-                  cargo build --release --target ${{ matrix.target }} --bin serverlessd &
-                  cargo build --release --target ${{ matrix.target }} --bin svld-binding-kv &
+                  cargo build --release --target ${{ matrix.target }} &
+                  cargo build --release --target ${{ matrix.target }} -p svld-binding-kv &
                   wait
               env:
                   RUSTC_WRAPPER: sccache
@@ -101,8 +101,8 @@ jobs:
 
             - name: Build
               run: |
-                  cargo build --release --target ${{ matrix.target }} --bin serverlessd &
-                  cargo build --release --target ${{ matrix.target }} --bin svld-binding-kv &
+                  cargo build --release --target ${{ matrix.target }} &
+                  cargo build --release --target ${{ matrix.target }} -p svld-binding-kv &
                   wait
               env:
                   CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
