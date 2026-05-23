@@ -1,4 +1,7 @@
-use std::collections::{HashMap, hash_map};
+use std::{
+    collections::{HashMap, hash_map},
+    sync::Arc,
+};
 
 use tokio_util::task::TaskTracker;
 
@@ -7,6 +10,7 @@ use crate::bindings::{BindingBackend, BindingBackendTx, backend::BindingClient};
 /// A store containing active bindings.
 #[derive(Default)]
 pub struct BindingStore {
+    /// The bindings (`{ binding_type: binding_item }`).
     bindings: HashMap<String, BindingItem>,
     tasks: TaskTracker,
 }
@@ -21,36 +25,54 @@ impl BindingStore {
     }
 
     /// Pushes a binding to the store.
-    pub fn push_spawn_binding<K: ToString, B: BindingBackend + Send + 'static>(
-        &mut self,
-        name: K,
-        mut backend: B,
-    ) {
-        let name = name.to_string();
-        let tx = backend.get_tx();
-        let client = backend.create_client(&name);
+    #[inline]
+    pub fn push_binding(&mut self, type_: &str, backend: Arc<dyn BindingBackend>) {
+        let type_ = type_.to_string();
+        self.bindings.insert(type_, BindingItem { backend });
+    }
 
-        self.bindings.insert(name, BindingItem { tx, client });
-        self.tasks.spawn(async move {
-            backend.start().await;
-        });
+    /// Pushes a binding to the store and spawns the task.
+    #[inline]
+    pub fn push_binding_and_spawn<F>(
+        &mut self,
+        type_: &str,
+        backend: Arc<dyn BindingBackend>,
+        task: F,
+    ) where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.push_binding(type_, backend);
+        self.tasks.spawn(task);
     }
 
     /// Adds a binding, then returns `Self`.
     #[inline]
-    pub fn add_spawn_binding<K: ToString, B: BindingBackend + Send + 'static>(
-        mut self,
-        name: K,
-        backend: B,
-    ) -> Self {
-        self.push_spawn_binding(name, backend);
+    pub fn add_binding(mut self, type_: &str, backend: Arc<dyn BindingBackend>) -> Self {
+        self.push_binding(type_, backend);
         self
     }
 
-    /// Gets a handle to the binding backend.
+    /// Adds a binding and spawns the task, then returns `Self`.
+    #[inline]
+    pub fn add_binding_and_spawn<F>(
+        mut self,
+        type_: &str,
+        backend: Arc<dyn BindingBackend>,
+        task: F,
+    ) -> Self
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.push_binding_and_spawn(type_, backend, task);
+        self
+    }
+
+    /// Gets a handle to the binding backend from the type of the binding.
     #[inline(always)]
-    pub fn get_binding_tx<K: AsRef<str>>(&self, name: K) -> Option<BindingBackendTx> {
-        self.bindings.get(name.as_ref()).map(|item| item.tx.clone())
+    pub fn get_binding_tx(&self, type_: &str) -> Option<BindingBackendTx> {
+        self.bindings.get(type_).map(|item| item.get_tx())
     }
 
     /// Lists all bindings.
@@ -66,9 +88,20 @@ impl std::fmt::Debug for BindingStore {
     }
 }
 
-/// A thin wrapper around the binding backend transmitter (backend tx)
-/// and the binding client.
+/// A thin wrapper around the binding backend.
+#[repr(transparent)]
 pub struct BindingItem {
-    pub tx: BindingBackendTx,
-    pub client: Box<dyn BindingClient>,
+    backend: Arc<dyn BindingBackend>,
+}
+
+impl BindingItem {
+    #[inline(always)]
+    pub fn create_client(&self, name: &str) -> Box<dyn BindingClient> {
+        self.backend.create_client(name)
+    }
+
+    #[inline(always)]
+    pub fn get_tx(&self) -> BindingBackendTx {
+        self.backend.get_tx()
+    }
 }

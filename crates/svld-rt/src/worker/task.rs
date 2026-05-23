@@ -359,7 +359,7 @@ async fn create_task(rx: &mut WorkerRx, args: InitWorkerArgs<'_>) -> Result<bool
             }
 
             WorkerTrigger::Http { reply, request } => {
-                tracing::info!("worker received http");
+                tracing::info!("worker received http, request: {:?}", request);
 
                 if let Some(gfetch) = entrypoint_fetch.take() {
                     let isolate = unsafe { state.get_isolate() };

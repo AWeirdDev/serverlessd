@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use tokio::sync::{mpsc, oneshot};
 
 #[repr(packed)]
@@ -21,16 +20,12 @@ pub type BindingBackendTx = mpsc::UnboundedSender<BindingBackendMessage>;
 pub type BindingBackendRx = mpsc::UnboundedReceiver<BindingBackendMessage>;
 
 /// A binding backend abstraction.
-#[async_trait]
-pub trait BindingBackend: Send + 'static {
+pub trait BindingBackend: Send + Sync + 'static {
     /// Gets a handle to this backend.
     fn get_tx(&self) -> BindingBackendTx;
 
     /// Creates a client from the env name for the worker.
-    fn create_client<K: ToString>(&self, env_name: K) -> Box<dyn BindingClient>;
-
-    /// Starts the backend task loop.
-    async fn start(&mut self);
+    fn create_client(&self, binding_name: &str) -> Box<dyn BindingClient>;
 }
 
 /// Creates a binding backend channel.
@@ -44,6 +39,9 @@ pub fn binding_backend_channel() -> (BindingBackendTx, BindingBackendRx) {
 /// # Safety
 /// `Send + Sync + 'static`.
 pub trait BindingClient: Send + Sync + 'static {
-    /// Gets the JavaScript interface of the binding.
-    fn get_interface<'s>(&self, scope: &v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>>;
+    /// Creates the JavaScript interface of the binding.
+    fn create_interface<'s>(
+        &self,
+        scope: &v8::PinScope<'s, '_>,
+    ) -> Option<v8::Local<'s, v8::Value>>;
 }

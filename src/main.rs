@@ -17,7 +17,7 @@ use bytes::Bytes;
 
 use clap::Parser;
 use svld_rt::{
-    bindings::{self, BindingStore},
+    bindings::{BindingStore, ipc},
     serverless::Serverless,
 };
 use tokio::sync::mpsc;
@@ -256,14 +256,37 @@ fn main() {
     }
 }
 
-pub fn start_binding_backends() -> Arc<BindingStore> {
-    Arc::new(
-        BindingStore::new().add_binding(
-            "KV",
-            bindings::kv::KvBackend::new(".serverlessd/binding_kv.db")
-                .expect("failed to initialize binding kv"),
-        ),
-    )
+fn start_ipc_server(
+    ipc_path: PathBuf,
+    binding_types: Vec<String>,
+    binding_store: &mut BindingStore,
+) {
+    let server = match ipc::IpcBindingsServer::builder()
+        .path(ipc_path)
+        .binding_types(binding_types)
+        .binding_store(binding_store)
+        .build()
+    {
+        Ok(server) => server,
+        Err(err) => {
+            tracing::error!("failed to start bindings server, error: {err:?}");
+            return;
+        }
+    };
+
+    tokio::task::spawn(server.start());
+}
+
+fn start_binding_backends() -> Arc<BindingStore> {
+    let mut store = BindingStore::new();
+
+    start_ipc_server(
+        PathBuf::from(".serverlessd/server.sock"),
+        vec![],
+        &mut store,
+    );
+
+    Arc::new(store)
 }
 
 async fn start_one(source: String, addr: SocketAddr, secret: String) {

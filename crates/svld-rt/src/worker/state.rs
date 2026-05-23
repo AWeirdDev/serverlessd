@@ -201,7 +201,7 @@ impl WorkerState {
     }
 
     #[inline(always)]
-    pub fn get_binding<K: AsRef<str>>(&self, name: K) -> Option<BindingBackendTx> {
+    pub fn get_binding(&self, name: &str) -> Option<BindingBackendTx> {
         self.binding_store.get_binding_tx(name)
     }
 }

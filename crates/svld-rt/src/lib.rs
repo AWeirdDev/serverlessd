@@ -3,6 +3,7 @@ mod compile;
 mod env;
 mod intrinsics;
 mod macros;
+mod utils;
 
 // public modules
 pub mod bindings;
