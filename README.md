@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./docs/content/serverlessd-logo.png" width="480" />
+
 <h1>serverlessd<br /><sup>(serverless runtime)</sup></h1>
 
 </div>
