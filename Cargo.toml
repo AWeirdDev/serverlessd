@@ -16,7 +16,6 @@ tokio-util = { version = "0.7.18", features = ["rt"] }
 dotenvy = "0.15.7"
 async-trait = "0.1.89"
 rand = "0.10.0"
-askama = { version = "0.15.6", features = ["alloc", "derive"] }
 bytes = "1.11.1"
 
 # custom deps

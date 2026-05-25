@@ -1,6 +1,5 @@
 use std::{mem, net::SocketAddr, sync::Arc};
 
-use askama::Template;
 use salvo::{
     affix_state,
     catcher::Catcher,
@@ -15,16 +14,6 @@ use svld_rt::{
 };
 
 use crate::handle::ServerlessHandle;
-
-#[derive(Template)]
-#[template(path = "404.html")]
-struct NotFoundTemplate;
-
-#[derive(Template)]
-#[template(path = "error.html")]
-struct ErrorTemplate<'a> {
-    reasoning: &'a str,
-}
 
 struct AppState {
     serverless: ServerlessHandle,
@@ -71,12 +60,8 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
 
     let worker_req = {
         let Ok(payload) = req.payload().await else {
-            resp.render(
-                ErrorTemplate {
-                    reasoning: "payload too large (>64KB) or failed to load payload",
-                }
-                .to_string(),
-            );
+            resp.status_code(StatusCode::BAD_REQUEST);
+            resp.render("payload too large (>64KB) or failed to load payload");
             return;
         };
         WorkerHttpRequest::builder()
@@ -105,7 +90,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
                         true,
                     )
                     .ok();
-                    resp.render(NotFoundTemplate.to_string());
+                    resp.render("not found");
                 }
 
                 CreateWorkerError::CannotCreateTask(reason) => {
@@ -118,12 +103,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
                         true,
                     )
                     .ok();
-                    resp.render(
-                        ErrorTemplate {
-                            reasoning: "We couldn't allocate any space for this worker.",
-                        }
-                        .to_string(),
-                    );
+                    resp.render("We couldn't allocate any space for this worker.");
                 }
             }
 
@@ -158,12 +138,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
             )
             .ok();
 
-            resp.render(
-                ErrorTemplate {
-                    reasoning: "Failed to execute worker; an unknown error occurred.",
-                }
-                .to_string(),
-            );
+            resp.render("Failed to execute worker; an unknown error occurred.".to_string());
             return;
         }
     };
@@ -188,12 +163,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
                 true,
             )
             .ok();
-            resp.render(
-                ErrorTemplate {
-                    reasoning: &err.to_string(),
-                }
-                .to_string(),
-            );
+            resp.render(format!("js error:\n{}", err.to_string()));
         }
     }
 }
