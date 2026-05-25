@@ -25,7 +25,7 @@ pub type BindingBackendRx = mpsc::UnboundedReceiver<BindingBackendMessage>;
 /// A binding backend abstraction.
 pub trait BindingBackend: Send + Sync + 'static {
     /// Gets a handle to this backend.
-    fn get_tx(&self) -> BindingBackendTx;
+    fn get_tx(&self) -> Option<BindingBackendTx>;
 
     /// Creates a client from the env name for the worker.
     fn create_client(&self) -> Box<dyn BindingClient>;

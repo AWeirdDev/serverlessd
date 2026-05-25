@@ -75,7 +75,7 @@ impl BindingStore {
     /// Gets a handle to the binding backend from the type of the binding.
     #[inline(always)]
     pub fn get_binding_tx(&self, type_: &str) -> Option<BindingBackendTx> {
-        self.bindings.get(type_).map(|item| item.get_tx())
+        self.bindings.get(type_).and_then(|item| item.get_tx())
     }
 
     #[inline(always)]
@@ -111,7 +111,7 @@ impl BindingItem {
     }
 
     #[inline(always)]
-    pub fn get_tx(&self) -> BindingBackendTx {
+    pub fn get_tx(&self) -> Option<BindingBackendTx> {
         self.backend.get_tx()
     }
 }

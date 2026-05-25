@@ -169,9 +169,8 @@ pub mod binding_backend {
 
     impl BindingBackend for IpcBindingBackend {
         #[inline(always)]
-        fn get_tx(&self) -> BindingBackendTx {
+        fn get_tx(&self) -> Option<BindingBackendTx> {
             self.get_atomic_tx()
-                .expect("ipc binding backend not initialized yet")
         }
 
         #[inline]
@@ -244,7 +243,10 @@ mod binding_client {
                                      to_rust_string_lossy(scope);
 
                                  let state = WorkerState::get_from_isolate(scope);
-                                 let tx = state.get_binding_tx(&binding_type).unwrap();
+                                 let Some(tx) = state.get_binding_tx(&binding_type) else {
+                                     throw(scope, ThrowException::error("binding is currently unavailable"));
+                                     return;
+                                 };
 
                                  let args_len = args.length();
                                  let arr = v8::Array::new(scope, args_len);
