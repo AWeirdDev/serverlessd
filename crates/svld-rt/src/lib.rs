@@ -1,6 +1,5 @@
 // private modules
 mod compile;
-mod env;
 mod intrinsics;
 mod macros;
 mod utils;

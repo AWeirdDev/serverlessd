@@ -1,6 +1,7 @@
 //! The worker runtime.
 
 mod core;
+mod env;
 mod error;
 mod state;
 mod task;

@@ -17,9 +17,9 @@ use v8::{
 use crate::{
     bindings::BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
-    env::create_js_env,
     intrinsics::{self, JsRequest, JsResponse},
     models::{WorkerConfig, WorkerHttpRequest, WorkerHttpResponse},
+    worker::env::create_js_env,
 };
 use svld_language::{
     ExceptionDetails, ExceptionDetailsExt, Promised, ThrowException, get_bytes, throw,
