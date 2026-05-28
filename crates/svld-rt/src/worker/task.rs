@@ -93,7 +93,6 @@ pub(super) async fn create_cancel_safe_task(
 
     let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
 
-    let mut roll_id = 0_i32;
     while let Some(msg) = rx.recv().await {
         match msg {
             WorkerTrigger::StartTask { id, task } => {
@@ -109,7 +108,6 @@ pub(super) async fn create_cancel_safe_task(
                         .tx(tx.clone())
                         .monitor_handle(monitor_handle.clone())
                         .state_handle(&mut state_handle)
-                        .roll_id(roll_id)
                         .platform(platform.clone())
                         .binding_store(binding_store.clone())
                         .build(),
@@ -143,7 +141,6 @@ pub(super) async fn create_cancel_safe_task(
                     }
                 }
 
-                roll_id = roll_id.wrapping_add(1);
                 pod_tx
                     .send(PodTrigger::MarkWorkerAsSleeping { id })
                     .await
@@ -185,7 +182,6 @@ struct InitWorkerArgs<'a> {
     tx: WorkerTx,
     monitor_handle: PodAsideMonitorHandle,
     state_handle: &'a mut Option<Arc<WorkerState>>,
-    roll_id: i32,
     platform: SharedRef<Platform>,
     binding_store: Arc<BindingStore>,
 }
@@ -579,7 +575,6 @@ async fn init_worker_for_task(
         tx,
         monitor_handle,
         state_handle,
-        roll_id,
         platform,
         binding_store,
     }: InitWorkerArgs<'_>,
@@ -640,7 +635,7 @@ async fn init_worker_for_task(
 
         let module = unwrap_compilation(
             try_catch,
-            compile::compile_module(try_catch, source, format!("worker.js?roll={}", roll_id)),
+            compile::compile_module(try_catch, source, "worker.js"),
         )?;
 
         // instantiate imports, etc.
