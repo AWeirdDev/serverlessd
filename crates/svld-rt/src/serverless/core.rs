@@ -7,7 +7,7 @@ use v8::{Platform, SharedRef};
 
 use crate::{
     bindings::BindingStore,
-    models::WorkerConfig,
+    models::{GlobalConfig, WorkerConfig},
     pod::PodHandle,
     serverless::{
         code_store::{CodeStore, CodeStoreError},
@@ -32,6 +32,7 @@ pub struct Serverless {
     pub platform: SharedRef<Platform>,
     pub binding_store: Arc<BindingStore>,
     pub code_store: CodeStore,
+    pub global_config: Arc<GlobalConfig>,
 
     pods: Vec<PodHandle>,
     space: SpaceState,
@@ -47,6 +48,7 @@ impl Serverless {
         parent: Option<&str>,
         workers_path: Option<&str>,
         binding_store: Arc<BindingStore>,
+        global_config: Arc<GlobalConfig>,
     ) -> Self {
         // we gotta initialize the platform first
         let platform = {
@@ -73,6 +75,7 @@ impl Serverless {
             pods,
             binding_store,
             space,
+            global_config,
         }
     }
 

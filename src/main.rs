@@ -18,11 +18,12 @@ use bytes::Bytes;
 use clap::Parser;
 use svld_rt::{
     bindings::{BindingStore, ipc},
-    models::{BindingConfig, WorkerConfig},
+    models::{BindingConfig, GlobalConfig, WorkerConfig},
     serverless::Serverless,
 };
-use svld_wrangler_config::WranglerConfig;
 use tokio::sync::mpsc;
+
+use svld_configs::WranglerConfig;
 
 use crate::{handle::ServerlessHandle, task::serverless_task};
 
@@ -63,45 +64,19 @@ enum Command {
 #[derive(clap::Args)]
 struct OneArgs {
     /// The TOML configuration file (usually `wrangler.toml`)
-    config: PathBuf,
+    #[arg(short = 'w', long)]
+    worker_config: PathBuf,
 
-    /// The port to run. Defaults to 3000.
-    #[arg(long, required = false)]
-    port: Option<u16>,
-
-    /// The host to run.
-    #[arg(long, required = false)]
-    host: Option<String>,
-
-    /// The types of bindings the users are allowed to use.
-    #[arg(long)]
-    bindings: Option<Vec<String>>,
+    /// The serverlessd config file (usually `serverlessd.toml`)
+    #[arg(short = 's', long)]
+    serverlessd_config: PathBuf,
 }
 
 #[derive(clap::Args)]
 struct RunArgs {
-    /// The port to run. Defaults to 3000.
-    #[arg(long, required = false)]
-    port: Option<u16>,
-
-    /// The host to run.
-    #[arg(long, required = false)]
-    host: Option<String>,
-
-    /// The number of pods (threads) for serverless execution.
-    #[arg(long, required = true)]
-    pods: usize,
-
-    /// The number of workers per pod (thread) for serverless execution.
-    /// It's recommended to use a lower amount so the delay between
-    /// switching await points (which is usually caused by CPU tasks)
-    /// can be reduced.
-    #[arg(long, required = true)]
-    workers_per_pod: usize,
-
-    /// The types of bindings the users are allowed to use.
-    #[arg(long)]
-    bindings: Option<Vec<String>>,
+    /// The serverlessd config file (usually `serverlessd.toml`)
+    #[arg(short = 's', long)]
+    serverlessd_config: PathBuf,
 }
 
 #[derive(clap::Args)]
@@ -139,32 +114,54 @@ fn main() {
                 .build()
                 .expect("failed to create async runtime");
 
-            let config_file = read_file_to_string(&args.config);
-            let config = match svld_wrangler_config::from_str(&config_file) {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("=====x error: failed to parse {:?}", &args.config);
-                    eprintln!("       error: {}", &e.to_string());
-                    return;
+            let worker_config = {
+                let file = read_file_to_string(&args.worker_config);
+                match svld_configs::wrangler::from_str(&file) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!("=====x error: failed to parse {:?}", &args.worker_config);
+                        eprintln!("       error: {}", &e.to_string());
+                        return;
+                    }
+                }
+            };
+
+            let serverlessd_config = {
+                let file = read_file_to_string(&args.serverlessd_config);
+                match svld_configs::serverlessd::from_str(&file) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!(
+                            "=====x error: failed to parse {:?}",
+                            &args.serverlessd_config
+                        );
+                        eprintln!("       error: {}", &e.to_string());
+                        return;
+                    }
                 }
             };
 
             let config_dir = args
-                .config
+                .worker_config
                 .parent()
                 .expect("couldn't find any parent above the config");
 
-            let source = read_file_to_string(&config_dir.join(&config.main));
+            let source = read_file_to_string(&config_dir.join(&worker_config.main));
 
             rt.block_on(start_one(
                 source,
                 SocketAddr::new(
-                    IpAddr::from_str(&args.host.as_ref().map(|k| &**k).unwrap_or("127.0.0.1"))
-                        .expect("failed to parse ip addr"),
-                    args.port.unwrap_or(3000),
+                    IpAddr::from_str(&serverlessd_config.host).expect("failed to parse ip addr"),
+                    serverlessd_config.port,
                 ),
-                config,
-                args.bindings.unwrap_or_default(),
+                worker_config,
+                Arc::new(
+                    GlobalConfig::builder()
+                        .max_memory(serverlessd_config.max_memory)
+                        .determination_strategy(serverlessd_config.determination_strategy)
+                        .build(),
+                ),
+                serverlessd_config.bindings,
             ));
             rt.shutdown_background();
         }
@@ -172,20 +169,40 @@ fn main() {
         Command::Run(args) => {
             tracing::info!("creating a full serverless runtime...");
 
+            let serverlessd_config = {
+                let file = read_file_to_string(&args.serverlessd_config);
+                match svld_configs::serverlessd::from_str(&file) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!(
+                            "=====x error: failed to parse {:?}",
+                            &args.serverlessd_config
+                        );
+                        eprintln!("       error: {}", &e.to_string());
+                        return;
+                    }
+                }
+            };
+
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .expect("failed to create async runtime");
 
             rt.block_on(start(
-                args.pods,
-                args.workers_per_pod,
+                serverlessd_config.pods,
+                serverlessd_config.workers_per_pod,
                 SocketAddr::new(
-                    IpAddr::from_str(&args.host.as_ref().map(|k| &**k).unwrap_or("127.0.0.1"))
-                        .expect("failed to parse ip addr"),
-                    args.port.unwrap_or(3000),
+                    IpAddr::from_str(&serverlessd_config.host).expect("failed to parse ip addr"),
+                    serverlessd_config.port,
                 ),
-                args.bindings.unwrap_or_default(),
+                Arc::new(
+                    GlobalConfig::builder()
+                        .max_memory(serverlessd_config.max_memory)
+                        .determination_strategy(serverlessd_config.determination_strategy)
+                        .build(),
+                ),
+                serverlessd_config.bindings,
             ));
             rt.shutdown_background();
         }
@@ -287,13 +304,15 @@ fn start_binding_backends(binding_types: Vec<String>) -> Arc<BindingStore> {
 async fn start_one(
     source: String,
     addr: SocketAddr,
-    config: WranglerConfig,
+    worker_config: WranglerConfig,
+    global_config: Arc<GlobalConfig>,
     allowed_binding_types: Vec<String>,
 ) {
     let serverless = Serverless::builder()
         .n_workers(1)
         .n_pods(1)
         .binding_store(start_binding_backends(allowed_binding_types))
+        .global_config(global_config.clone())
         .build();
 
     let worker_url = format!("http://{}/worker/one", addr);
@@ -304,10 +323,10 @@ async fn start_one(
             serverless,
             rx,
             addr,
-            ServerlessHandle::new(tx.clone()),
+            ServerlessHandle::new(tx.clone(), global_config.clone()),
         ));
 
-        (ServerlessHandle::new(tx), handle)
+        (ServerlessHandle::new(tx, global_config), handle)
     };
 
     let res = svl
@@ -315,7 +334,7 @@ async fn start_one(
             Bytes::from_owner(source),
             WorkerConfig::builder()
                 .bindings(
-                    config
+                    worker_config
                         .get_bindings()
                         .into_iter()
                         .map(|(type_, name)| {
@@ -345,12 +364,14 @@ async fn start(
     n_workers: usize,
     n_workers_per_pod: usize,
     addr: SocketAddr,
+    global_config: Arc<GlobalConfig>,
     allowed_binding_types: Vec<String>,
 ) {
     let serverless = Serverless::builder()
         .n_workers(n_workers)
         .n_pods(n_workers_per_pod)
         .binding_store(start_binding_backends(allowed_binding_types))
+        .global_config(global_config.clone())
         .build();
 
     let (_svl, handle) = {
@@ -359,10 +380,10 @@ async fn start(
             serverless,
             rx,
             addr,
-            ServerlessHandle::new(tx.clone()),
+            ServerlessHandle::new(tx.clone(), global_config.clone()),
         ));
 
-        (ServerlessHandle::new(tx), handle)
+        (ServerlessHandle::new(tx, global_config), handle)
     };
 
     if let Err(e) = handle.await {

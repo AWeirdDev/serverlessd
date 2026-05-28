@@ -18,7 +18,7 @@ use crate::{
     bindings::BindingStore,
     blocks::{MaybeReplier, ReplierBlock},
     intrinsics::{self, JsRequest, JsResponse},
-    models::{WorkerConfig, WorkerHttpRequest, WorkerHttpResponse},
+    models::{GlobalConfig, WorkerConfig, WorkerHttpRequest, WorkerHttpResponse},
     worker::env::create_js_env,
 };
 use svld_language::{
@@ -31,7 +31,7 @@ use crate::{
     scope_with_context,
     triggers::{PodTrigger, PodTx, WorkerRx, WorkerTrigger, WorkerTx},
     try_catch,
-    worker::{WorkerState, state::CreateWorkerStateArgs},
+    worker::WorkerState,
 };
 
 /// The worker task.
@@ -76,6 +76,9 @@ pub struct WarmUpWorkerArgs {
 
     /// The binding store.
     pub binding_store: Arc<BindingStore>,
+
+    /// The global config.
+    pub global_config: Arc<GlobalConfig>,
 }
 
 pub(super) async fn create_cancel_safe_task(
@@ -86,9 +89,105 @@ pub(super) async fn create_cancel_safe_task(
         monitor_handle,
         platform,
         binding_store,
+        global_config,
     }: WarmUpWorkerArgs,
 ) {
-    let mut isolate = Box::new(v8::Isolate::new(Default::default()));
+    let mut isolate = Box::new(v8::Isolate::new(
+        v8::CreateParams::default().heap_limits(0, global_config.max_memory),
+    ));
+
+    #[cfg(false)]
+    {
+        /// From V8:
+        ///
+        /// When the heap size approaches max, V8 will perform series of garbage collections and
+        /// invoke the `NearHeapLimitCallback`.
+        ///
+        /// If the garbage collections do not help and the callback does not increase the limit,
+        /// then V8 will crash with `V8::FatalProcessOutOfMemory`.
+        ///
+        /// ***
+        ///
+        /// The docs is not clear of what the flow actually is. Fuck this, let's see the impl.
+        ///
+        /// From v8 source (taken from Node source as a dependency):
+        ///
+        /// ```cpp
+        /// void Heap::CheckHeapLimitReached() {
+        ///   if (ReachedHeapLimit()) {
+        ///     InvokeNearHeapLimitCallback();
+        ///     if (ReachedHeapLimit()) {
+        ///       if (v8_flags.heap_snapshot_on_oom) {
+        ///         heap_profiler()->WriteSnapshotToDiskAfterGC();
+        ///       }
+        ///       FatalProcessOutOfMemory("Reached heap limit");
+        ///     }
+        ///   }
+        /// }
+        /// ```
+        ///
+        /// Additionally:
+        ///
+        /// ```cpp
+        /// for (int attempt = 0; attempt < kMaxNumberOfAttempts; attempt++) {
+        ///     const size_t roots_before = num_roots();
+        ///     current_gc_flags_ = gc_flags;
+        ///     CollectGarbage(OLD_SPACE, gc_reason, gc_callback_flags,
+        ///                    perform_heap_limit_check, perform_ineffective_mc_check);
+        ///     DCHECK_EQ(GCFlags(GCFlag::kNoFlags), current_gc_flags_);
+        ///
+        ///     // As long as we are at or above the heap limit, we need another GC to
+        ///     // survive CheckHeapLimitReached() after the loop.
+        ///     if (ReachedHeapLimit()) {
+        ///       continue;
+        ///     }
+        ///
+        ///     if ((roots_before == num_roots()) &&
+        ///         ((attempt + 1) >= kMinNumberOfAttempts)) {
+        ///       break;
+        ///     }
+        ///  }
+        ///
+        /// CheckHeapLimitReached();
+        /// ```
+        ///
+        /// Also, for the `ReachedHeapLimit` function:
+        ///
+        /// ```cpp
+        /// bool Heap::ReachedHeapLimit() { return !CanExpandOldGeneration(0); }
+        /// bool Heap::CanExpandOldGeneration(size_t size) const {
+        ///   if (force_oom_ || force_gc_on_next_allocation_) return false;
+        ///   if (OldGenerationCapacity() + size > limits()->max_old_generation_size()) {
+        ///     return false;
+        ///   }
+        ///   // Stay below `MaxReserved()` such that it is more likely that committing the
+        ///   // second semi space at the beginning of a GC succeeds.
+        ///   return memory_allocator()->Size() + size <= MaxReserved();
+        /// }
+        /// ```
+        ///
+        /// If we essentailly deallocate some memory, we're less likely to get the fatal error
+        /// `V8::FatalProcessOutOfMemory`, which kills this process.
+        ///
+        /// We could sketch out the overall flow like this:
+        /// ```text
+        /// heap size near max -> gc ---(gc fails?)--> NearHeapLimitCallback
+        /// ```
+        ///
+        /// We now know that `CheckHeapLimitReached()` is called after GC.
+        /// Therefore technically, if GC succeeds, this never gets called.
+        ///
+        /// We can use this as a notification for "fuck we run out of memory."
+        unsafe extern "C" fn near_limit_callback(
+            data: *mut c_void,
+            current_heap_limit: usize,
+            initial_heap_limit: usize,
+        ) -> usize {
+            todo!()
+        }
+        isolate.add_near_heap_limit_callback(near_limit_callback, null_mut());
+    }
+
     isolate.set_microtasks_policy(v8::MicrotasksPolicy::Explicit);
 
     let isolate_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(isolate)) };
@@ -110,6 +209,7 @@ pub(super) async fn create_cancel_safe_task(
                         .state_handle(&mut state_handle)
                         .platform(platform.clone())
                         .binding_store(binding_store.clone())
+                        .global_config(global_config.clone())
                         .build(),
                 )
                 .await;
@@ -184,6 +284,7 @@ struct InitWorkerArgs<'a> {
     state_handle: &'a mut Option<Arc<WorkerState>>,
     platform: SharedRef<Platform>,
     binding_store: Arc<BindingStore>,
+    global_config: Arc<GlobalConfig>,
 }
 
 /// Create a task for running this worker.
@@ -577,6 +678,7 @@ async fn init_worker_for_task(
         state_handle,
         platform,
         binding_store,
+        global_config,
     }: InitWorkerArgs<'_>,
 ) -> Result<InitResult, WorkerError> {
     let WorkerTask {
@@ -584,17 +686,25 @@ async fn init_worker_for_task(
         config: WorkerConfig { name, bindings },
     } = task;
 
-    let Some(state) = WorkerState::create_injected(
-        CreateWorkerStateArgs::builder()
-            .isolate(isolate)
-            .monitor_handle(monitor_handle)
-            .worker_tx(tx)
-            .worker_name(name)
-            .platform(platform)
-            .binding_store(binding_store.clone())
-            .build(),
-    )
-    .await
+    /*
+    .isolate(isolate)
+    .monitor_handle(monitor_handle)
+    .worker_tx(tx)
+    .worker_name(name)
+    .platform(platform)
+    .binding_store(binding_store.clone())
+    .build(),
+     */
+    let Some(state) = WorkerState::create_injected()
+        .isolate(isolate)
+        .monitor_handle(monitor_handle)
+        .worker_tx(tx)
+        .worker_name(name)
+        .platform(platform)
+        .binding_store(binding_store.clone())
+        .global_config(global_config)
+        .call()
+        .await
     else {
         return Err(WorkerError::Unknown(
             "failed to create worker state".to_string(),

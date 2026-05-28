@@ -1,24 +1,26 @@
+use std::sync::Arc;
+
 use bytes::Bytes;
 use tokio::sync::oneshot;
 
 use svld_rt::{
     blocks::Reply,
-    models::{WorkerConfig, WorkerHttpRequest},
+    models::{GlobalConfig, WorkerConfig, WorkerHttpRequest},
     serverless::{CodeStoreError, CreateWorkerError},
     triggers::{PodTrigger, WorkerTrigger},
 };
 
 use crate::trigger::{ServerlessTrigger, ServerlessTx};
 
-#[repr(transparent)]
 pub struct ServerlessHandle {
     tx: ServerlessTx,
+    pub global_config: Arc<GlobalConfig>,
 }
 
 impl ServerlessHandle {
     #[inline(always)]
-    pub fn new(tx: ServerlessTx) -> Self {
-        Self { tx }
+    pub fn new(tx: ServerlessTx, global_config: Arc<GlobalConfig>) -> Self {
+        Self { tx, global_config }
     }
 
     /// Notifies the serverless runtime to create a worker.

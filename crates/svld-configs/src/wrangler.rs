@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Root configuration — maps to the top-level `wrangler.toml`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WranglerConfig {
     pub name: String,
 
@@ -29,6 +29,8 @@ pub struct WranglerConfig {
     #[serde(default, skip_serializing_if = "HashMap::is_empty", flatten)]
     pub extra: HashMap<String, toml::Value>,
 }
+
+crate::from_str_impl!(WranglerConfig);
 
 impl WranglerConfig {
     /// Gets all binding types from the config.
@@ -57,14 +59,14 @@ impl WranglerConfig {
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /// A route can be a bare pattern string or an object with a zone.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Route {
     Pattern(String),
     Object(RouteObject),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RouteObject {
     pub pattern: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,7 +76,7 @@ pub struct RouteObject {
 }
 
 /// Workers Assets (new, replaces `site` for most use-cases).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Assets {
     pub directory: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,7 +85,7 @@ pub struct Assets {
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Triggers {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub crons: Vec<String>,
@@ -92,14 +94,8 @@ pub struct Triggers {
 // ── Per-environment overrides ─────────────────────────────────────────────────
 
 /// `[env.<name>]` block — mirrors the top-level fields that can be overridden.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct EnvConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-}
-
-/// Gets a structured wrangler config from a `&str` slice.
-#[inline(always)]
-pub fn from_str(s: &str) -> Result<WranglerConfig, toml::de::Error> {
-    toml::from_str::<WranglerConfig>(s)
 }

@@ -29,6 +29,7 @@ pub(super) async fn serverless_task(
             serverless.get_platform(),
             serverless.binding_store.clone(),
             serverless.n_workers,
+            serverless.global_config.clone(),
         );
         serverless.push_pod(pod);
         handles.push(handle);

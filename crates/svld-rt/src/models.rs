@@ -38,3 +38,10 @@ pub struct BindingConfig {
     /// The type of the binding. For example: `kv`.
     pub type_: String,
 }
+
+#[derive(bon::Builder, Debug, Serialize, Deserialize)]
+pub struct GlobalConfig {
+    pub max_memory: usize,
+
+    pub determination_strategy: svld_configs::serverlessd::DeterminationStrategy,
+}

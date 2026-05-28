@@ -6,6 +6,7 @@ use v8::{Platform, SharedRef};
 
 use crate::{
     bindings::BindingStore,
+    models::GlobalConfig,
     pod::{
         handle::PodHandle,
         monitor::{PodAsideMonitor, PodAsideMonitorHandle},
@@ -35,6 +36,7 @@ pub struct Pod {
     pub tasks: TaskTracker,
     pub platform: SharedRef<Platform>,
     pub binding_store: Arc<BindingStore>,
+    pub global_config: Arc<GlobalConfig>,
     pub(super) workers: Vec<StatedWorkerHandle>,
 }
 
@@ -48,6 +50,7 @@ impl Pod {
         platform: SharedRef<Platform>,
         binding_store: Arc<BindingStore>,
         n_workers: usize,
+        global_config: Arc<GlobalConfig>,
     ) -> (PodHandle, task::JoinHandle<io::Result<()>>) {
         let (tx, rx) = mpsc::channel::<PodTrigger>(n_workers);
         let pod_handle = PodHandle::new(tx.clone());
@@ -69,6 +72,7 @@ impl Pod {
                 m.start()
             },
             binding_store,
+            global_config,
         };
 
         let join_handle = {
@@ -158,6 +162,12 @@ impl Pod {
     #[inline(always)]
     pub fn get_binding_store(&self) -> Arc<BindingStore> {
         self.binding_store.clone()
+    }
+
+    /// Gets a clone of the global config from the serverless runtime.
+    #[inline(always)]
+    pub fn get_global_config(&self) -> Arc<GlobalConfig> {
+        self.global_config.clone()
     }
 }
 

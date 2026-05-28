@@ -8,6 +8,7 @@ use salvo::{
 };
 use serde_json::json;
 
+use svld_configs::DeterminationStrategy;
 use svld_rt::{
     models::{WorkerHttpRequest, WorkerHttpResponse},
     serverless::CreateWorkerError,
@@ -55,8 +56,29 @@ async fn wildcard() -> &'static str {
 
 #[handler]
 async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
-    let name = req.param::<String>("name").unwrap();
-    let state = depot.obtain::<Arc<AppState>>().unwrap();
+    let serverless = &depot.obtain::<Arc<AppState>>().unwrap().serverless;
+    let name = match serverless.global_config.determination_strategy {
+        DeterminationStrategy::Path => req.param::<String>("name").unwrap(),
+        DeterminationStrategy::HostName => {
+            let Some(value) = req.headers().get("Host") else {
+                resp.status_code(StatusCode::NOT_FOUND);
+                resp.render("not found");
+                return;
+            };
+
+            let name = match value.to_str() {
+                Ok(t) => t,
+                Err(err) => {
+                    tracing::error!("failed to parse 'Host' header value: {err:?}");
+                    resp.status_code(StatusCode::BAD_REQUEST);
+                    resp.render("bad worker name");
+                    return;
+                }
+            };
+
+            name.to_string()
+        }
+    };
 
     let worker_req = {
         let Ok(payload) = req.payload().await else {
@@ -64,6 +86,7 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
             resp.render("payload too large (>64KB) or failed to load payload");
             return;
         };
+
         WorkerHttpRequest::builder()
             .body(payload.clone())
             .headers(mem::take(req.headers_mut()))
@@ -78,18 +101,12 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
             .build()
     };
 
-    let (pod_id, worker_id) = match state.serverless.create_worker_task(name).await {
+    let (pod_id, worker_id) = match serverless.create_worker_task(name).await {
         Ok(t) => t,
         Err(err) => {
             match err {
                 CreateWorkerError::UnknownWorker(_) => {
                     resp.status_code(StatusCode::NOT_FOUND);
-                    resp.add_header(
-                        HeaderName::from_static("content-type"),
-                        HeaderValue::from_static("text/html"),
-                        true,
-                    )
-                    .ok();
                     resp.render("not found");
                 }
 
@@ -111,15 +128,13 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
         }
     };
 
-    let res = state
-        .serverless
+    let res = serverless
         .send_http_to_worker(pod_id, worker_id, worker_req)
         .await;
 
     // this is mandatory!
     {
-        let res = state
-            .serverless
+        let res = serverless
             .halt_task_and_clear_space(pod_id, worker_id)
             .await;
         if res.is_err() {

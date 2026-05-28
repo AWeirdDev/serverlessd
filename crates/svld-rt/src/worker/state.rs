@@ -1,6 +1,5 @@
 use std::{cell::RefCell, collections::VecDeque, ffi::c_void, ptr::NonNull, sync::Arc};
 
-use bon::Builder;
 use tokio::sync::Notify;
 use tokio_util::task::TaskTracker;
 use v8::{Global, Isolate, OwnedIsolate, Platform, PromiseResolver, SharedRef};
@@ -10,6 +9,7 @@ use svld_language::ThrowException;
 use crate::{
     bindings::{BindingBackendTx, BindingStore},
     blocks::{Blocks, HttpClientBlock, ReplierBlock},
+    models::GlobalConfig,
     pod::{MonitorHandle, PodAsideMonitorHandle},
     triggers::WorkerTx,
 };
@@ -34,46 +34,38 @@ pub struct WorkerState {
 
     pub name: String,
     pub binding_store: Arc<BindingStore>,
+    pub global_config: Arc<GlobalConfig>,
 }
 
-/// Parameters for creating a worker state.
-#[derive(Builder)]
-pub struct CreateWorkerStateArgs {
-    /// The platform the worker is on.
-    /// You can obtain this when initializing the platform with `v8`.
-    pub platform: SharedRef<Platform>,
-
-    /// The isolate pointer.
-    pub isolate: NonNull<OwnedIsolate>,
-
-    /// The name of the worker task.
-    pub worker_name: String,
-
-    /// A event dispatcher for the worker.
-    pub worker_tx: WorkerTx,
-
-    /// The monitor handle.
-    pub monitor_handle: PodAsideMonitorHandle,
-
-    /// The binding store.
-    pub binding_store: Arc<BindingStore>,
-}
-
+#[bon::bon]
 impl WorkerState {
     /// Create a new worker state, then inject state data to the isolate.
     ///
     /// # Safety
     /// `isolate` must exist.
-    #[inline(always)]
+    #[builder]
     pub async fn create_injected(
-        CreateWorkerStateArgs {
-            platform,
-            isolate,
-            worker_tx,
-            monitor_handle,
-            worker_name,
-            binding_store,
-        }: CreateWorkerStateArgs,
+        /// The platform the worker is on.
+        /// You can obtain this when initializing the platform with `v8`.
+        platform: SharedRef<Platform>,
+
+        /// The isolate pointer.
+        isolate: NonNull<OwnedIsolate>,
+
+        /// The name of the worker task.
+        worker_name: String,
+
+        /// A event dispatcher for the worker.
+        worker_tx: WorkerTx,
+
+        /// The monitor handle.
+        monitor_handle: PodAsideMonitorHandle,
+
+        /// The binding store.
+        binding_store: Arc<BindingStore>,
+
+        /// The global config.
+        global_config: Arc<GlobalConfig>,
     ) -> Option<Arc<Self>> {
         let isolate_handle = unsafe { isolate.as_ref() }.thread_safe_handle();
 
@@ -95,6 +87,7 @@ impl WorkerState {
 
             name: worker_name,
             binding_store,
+            global_config,
         });
 
         let item = Arc::clone(&slf);

@@ -21,7 +21,8 @@ typeid = "1.0.3"
 ijson = "0.1.6"
 async-trait = "0.1.89"
 sled = "0.34.7"
+interprocess = { version = "2.4.2", features = ["tokio"] }
 
 # custom deps
 svld-language = { path = "../svld-language" }
-interprocess = { version = "2.4.2", features = ["tokio"] }
+svld-configs = { path = "../svld-configs" }

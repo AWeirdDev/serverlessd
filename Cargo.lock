@@ -2618,8 +2618,8 @@ dependencies = [
  "salvo",
  "serde",
  "serde_json",
+ "svld-configs",
  "svld-rt",
- "svld-wrangler-config",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -2772,6 +2772,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "svld-configs"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "svld-ipc-client"
 version = "0.1.0"
 dependencies = [
@@ -2809,6 +2817,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sled",
+ "svld-configs",
  "svld-language",
  "thiserror 2.0.18",
  "tokio",
@@ -2816,14 +2825,6 @@ dependencies = [
  "tracing",
  "typeid",
  "v8",
-]
-
-[[package]]
-name = "svld-wrangler-config"
-version = "0.1.0"
-dependencies = [
- "serde",
- "toml",
 ]
 
 [[package]]
