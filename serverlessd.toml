@@ -1,0 +1,6 @@
+port = 3000
+host = "0.0.0.0"
+pods = 100
+workers-per-pod = 2
+bindings = []
+determination-strategy = "subdomain-name"

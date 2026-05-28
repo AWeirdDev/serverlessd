@@ -29,7 +29,7 @@ pub(super) async fn start_server(
     let router = Router::new()
         .hoop(affix_state::inject(Arc::new(AppState { serverless })))
         .push(Router::with_path("/worker/{name}/{**rest}").get(worker))
-        .push(Router::with_path("{**}").goal(wildcard));
+        .push(Router::with_path("{**}").goal(worker));
 
     println!("=====> server started at http://{}", addr);
 
@@ -50,16 +50,19 @@ async fn handle_error(res: &mut Response) {
 }
 
 #[handler]
-async fn wildcard() -> &'static str {
-    "{}"
-}
-
-#[handler]
 async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
     let serverless = &depot.obtain::<Arc<AppState>>().unwrap().serverless;
     let name = match serverless.global_config.determination_strategy {
-        DeterminationStrategy::Path => req.param::<String>("name").unwrap(),
-        DeterminationStrategy::HostName => {
+        DeterminationStrategy::Path => {
+            let Some(name) = req.param::<String>("name") else {
+                resp.status_code(StatusCode::NOT_FOUND);
+                resp.render("not found");
+                return;
+            };
+
+            name
+        }
+        DeterminationStrategy::SubdomainName => {
             let Some(value) = req.headers().get("Host") else {
                 resp.status_code(StatusCode::NOT_FOUND);
                 resp.render("not found");
@@ -76,7 +79,14 @@ async fn worker(req: &mut Request, resp: &mut Response, depot: &Depot) {
                 }
             };
 
-            name.to_string()
+            let Some((left, _)) = name.split_once('.') else {
+                tracing::error!("failed to split 'Host' header value: {name:?}");
+                resp.status_code(StatusCode::BAD_REQUEST);
+                resp.render("bad worker name");
+                return;
+            };
+
+            left.to_string()
         }
     };
 

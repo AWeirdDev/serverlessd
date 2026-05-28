@@ -35,7 +35,7 @@ pub struct ServerlessdConfig {
 crate::from_str_impl!(ServerlessdConfig);
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum DeterminationStrategy {
     /// Use the path to determine.
     ///
@@ -49,7 +49,7 @@ pub enum DeterminationStrategy {
     ///
     Path,
 
-    /// Use the host name to determine.
+    /// Use the subdomain name to determine.
     ///
     /// For example:
     ///
@@ -58,7 +58,7 @@ pub enum DeterminationStrategy {
     /// ```
     ///
     /// => `my-worker`
-    HostName,
+    SubdomainName,
 }
 
 mod defaults {
