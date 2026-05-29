@@ -1,3 +1,5 @@
-mod core;
+#[cfg(feature = "bindings")]
+mod bindings;
 
-pub use core::{BindingClient, BindingClientError, ClientMessage, ServerMessage, connect};
+#[cfg(feature = "bindings")]
+pub use bindings::{BindingClient, BindingClientError, ClientMessage, ServerMessage, connect};
