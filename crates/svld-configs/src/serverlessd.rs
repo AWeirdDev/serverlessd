@@ -3,14 +3,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ServerlessdConfig {
-    /// The port to bind the HTTP server to.
-    #[serde(default = "defaults::port")]
-    pub port: u16,
+    /// HTTP server settings.
+    pub http: HttpConfig,
 
-    /// The host to bind the HTTP server to.
-    #[serde(default = "defaults::host")]
-    pub host: String,
+    /// Runtime settings.
+    pub runtime: RuntimeConfig,
+}
 
+crate::from_str_impl!(ServerlessdConfig);
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RuntimeConfig {
     /// The number of pods (threads) for serverless execution.
     #[serde(default = "defaults::pods")]
     pub pods: usize,
@@ -19,20 +23,30 @@ pub struct ServerlessdConfig {
     #[serde(default = "defaults::workers_per_pod")]
     pub workers_per_pod: usize,
 
-    /// Available bindings the workers can use.
-    #[serde(default)]
-    pub bindings: Vec<String>,
-
     /// Maximum amount of memory in bytes.
     #[serde(default = "defaults::max_memory")]
     pub max_memory: usize,
+
+    /// Available bindings the workers can use.
+    #[serde(default)]
+    pub bindings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct HttpConfig {
+    /// The port to bind the HTTP server to.
+    #[serde(default = "defaults::port")]
+    pub port: u16,
+
+    /// The host to bind the HTTP server to.
+    #[serde(default = "defaults::host")]
+    pub host: String,
 
     /// The strategy for determinating what worker the request is looking for.
     #[serde(default = "defaults::determination_strategy")]
     pub determination_strategy: DeterminationStrategy,
 }
-
-crate::from_str_impl!(ServerlessdConfig);
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

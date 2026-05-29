@@ -152,17 +152,18 @@ fn main() {
             rt.block_on(start_one(
                 source,
                 SocketAddr::new(
-                    IpAddr::from_str(&serverlessd_config.host).expect("failed to parse ip addr"),
-                    serverlessd_config.port,
+                    IpAddr::from_str(&serverlessd_config.http.host)
+                        .expect("failed to parse ip addr"),
+                    serverlessd_config.http.port,
                 ),
                 worker_config,
                 Arc::new(
                     GlobalConfig::builder()
-                        .max_memory(serverlessd_config.max_memory)
-                        .determination_strategy(serverlessd_config.determination_strategy)
+                        .max_memory(serverlessd_config.runtime.max_memory)
+                        .determination_strategy(serverlessd_config.http.determination_strategy)
                         .build(),
                 ),
-                serverlessd_config.bindings,
+                serverlessd_config.runtime.bindings,
             ));
             rt.shutdown_background();
         }
@@ -192,19 +193,20 @@ fn main() {
                 .expect("failed to create async runtime");
 
             rt.block_on(start(
-                serverlessd_config.pods,
-                serverlessd_config.workers_per_pod,
+                serverlessd_config.runtime.pods,
+                serverlessd_config.runtime.workers_per_pod,
                 SocketAddr::new(
-                    IpAddr::from_str(&serverlessd_config.host).expect("failed to parse ip addr"),
-                    serverlessd_config.port,
+                    IpAddr::from_str(&serverlessd_config.http.host)
+                        .expect("failed to parse ip addr"),
+                    serverlessd_config.http.port,
                 ),
                 Arc::new(
                     GlobalConfig::builder()
-                        .max_memory(serverlessd_config.max_memory)
-                        .determination_strategy(serverlessd_config.determination_strategy)
+                        .max_memory(serverlessd_config.runtime.max_memory)
+                        .determination_strategy(serverlessd_config.http.determination_strategy)
                         .build(),
                 ),
-                serverlessd_config.bindings,
+                serverlessd_config.runtime.bindings,
             ));
             rt.shutdown_background();
         }

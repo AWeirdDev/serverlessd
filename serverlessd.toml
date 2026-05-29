@@ -1,11 +1,16 @@
-# ===== HTTP server settings =====
-
+[http]
+# HTTP server settings
 port = 3000
 host = "0.0.0.0"
 
+# Worker determination strategy
+# Could be either:
+# - path: Best for local testing. Like `localhost:3000/worker/worker-name`
+# - subdomain-name: Best for production. Like `worker-name.example.com`
+determination-strategy = "path"
 
-# ===== Worker architectural settings =====
-
+[runtime]
+# Worker architectural settings
 pods = 100  # the amount of pods (threads)
 workers-per-pod = 2  # the amount of workers per pod (thread)
 
@@ -21,10 +26,3 @@ bindings = [
     # "my-binding-1",
     # "my-binding-2",
 ]
-
-
-# ===== Worker determination strategy =====
-# Could be either:
-# - path: Best for local testing. Like `localhost:3000/worker/worker-name`
-# - subdomain-name: Best for production. Like `worker-name.example.com`
-determination-strategy = "path"
