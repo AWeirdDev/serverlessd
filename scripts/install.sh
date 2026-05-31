@@ -39,40 +39,82 @@ case "$ARCH" in
     ;;
 esac
 
-BINARY="${BIN_NAME}-${PLATFORM}-${ARCH}"
-
-info "detected platform: ${PLATFORM}-${ARCH}"
-info "Fetching latest release from github.com/${REPO}..."
-
-LATEST_URL="https://api.github.com/repos/${REPO}/releases/latest"
-TAG=$(curl -fsSL "$LATEST_URL" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
-
-if [ -z "$TAG" ]; then
-  error "failed to determine latest release tag"
-  exit 1
-fi
-
-info "found latest release: $TAG"
-
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${BINARY}"
-
-info "downloading ${BINARY}..."
-TMP_FILE="$(mktemp)"
-curl -fsSL "$DOWNLOAD_URL" -o "$TMP_FILE" || {
-  error "failed to download; the binary for ${PLATFORM}-${ARCH} may not be available for release ${TAG}"
-  rm -f "$TMP_FILE"
-  exit 1
+fetch_latest_tag() {
+  LATEST_URL="https://api.github.com/repos/${REPO}/releases/latest"
+  TAG=$(curl -fsSL "$LATEST_URL" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+  if [ -z "$TAG" ]; then
+    error "failed to determine latest release tag"
+    exit 1
+  fi
+  info "found latest release: $TAG"
 }
 
-chmod +x "$TMP_FILE"
+download_and_install() {
+  local remote_name="$1"
+  local install_name="$2"
 
-info "installing to ${INSTALL_DIR}/${BIN_NAME}..."
-if [ -w "$INSTALL_DIR" ]; then
-  mv "$TMP_FILE" "${INSTALL_DIR}/${BIN_NAME}"
-else
-  printf "\n"
-  info "sudo is required for this operation"
-  sudo mv "$TMP_FILE" "${INSTALL_DIR}/${BIN_NAME}"
-fi
+  info "downloading ${remote_name}..."
+  TMP_FILE="$(mktemp)"
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${remote_name}"
+  curl -fsSL "$DOWNLOAD_URL" -o "$TMP_FILE" || {
+    error "failed to download; '${remote_name}' may not be available for release ${TAG}"
+    rm -f "$TMP_FILE"
+    exit 1
+  }
 
-done_  "serverlessd (${TAG}) installed successfully! run 'serverlessd --help' to get started."
+  chmod +x "$TMP_FILE"
+
+  info "installing to ${INSTALL_DIR}/${install_name}..."
+  if [ -w "$INSTALL_DIR" ]; then
+    mv "$TMP_FILE" "${INSTALL_DIR}/${install_name}"
+  else
+    printf "\n"
+    info "sudo is required for this operation"
+    sudo mv "$TMP_FILE" "${INSTALL_DIR}/${install_name}"
+  fi
+}
+
+cmd_install() {
+  local BINARY="${BIN_NAME}-${PLATFORM}-${ARCH}"
+  info "detected platform: ${PLATFORM}-${ARCH}"
+  info "fetching latest release from github.com/${REPO}..."
+  fetch_latest_tag
+  download_and_install "$BINARY" "$BIN_NAME"
+  done_ "serverlessd (${TAG}) installed successfully! run 'serverlessd --help' to get started."
+}
+
+cmd_add() {
+  local BINDING_NAME="$1"
+  if [ -z "$BINDING_NAME" ]; then
+    error "usage: install.sh add <binding-name>"
+    exit 1
+  fi
+
+  local REMOTE_NAME="binding-${BINDING_NAME}-${PLATFORM}-${ARCH}"
+  local INSTALL_NAME="serverlessd-binding-${BINDING_NAME}"
+
+  info "detected platform: ${PLATFORM}-${ARCH}"
+  info "fetching latest release from github.com/${REPO}..."
+  fetch_latest_tag
+  download_and_install "$REMOTE_NAME" "$INSTALL_NAME"
+  done_ "binding '${BINDING_NAME}' (${TAG}) installed successfully!"
+}
+
+# --- entrypoint ---
+
+case "${1:-}" in
+  "")
+    cmd_install
+    ;;
+  add)
+    shift
+    cmd_add "$@"
+    ;;
+  *)
+    error "unknown command: $1"
+    printf "usage:\n"
+    printf "  install.sh            install serverlessd\n"
+    printf "  install.sh add <name> install a binding\n"
+    exit 1
+    ;;
+esac
