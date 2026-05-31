@@ -6,7 +6,6 @@ use std::collections::HashMap;
 
 /// Root configuration — maps to the top-level `wrangler.toml`.
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct WranglerConfig {
     pub name: String,
 

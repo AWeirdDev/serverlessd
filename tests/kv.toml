@@ -1,5 +1,5 @@
 name = "test-kv"
 main = "./kv.js"
 
-# [kv]
-# binding = "KV"
+[kv]
+binding = "KV"
